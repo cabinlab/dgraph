@@ -9,8 +9,8 @@ We develop to upstream-PR quality — a single complete feature covering DQL and
 **Key technical finding**: `s2.Polyline` implements `s2.Region` (verified: has `CapBound`, `RectBound`, `ContainsCell`, `IntersectsCell`, `CellUnionBound`). `RegionCoverer.Covering()` works directly on it. The covering strategy for LineString follows the same pattern as Polygon — no custom cell computation needed.
 
 **Reference commits**:
-- `17e96f736` — added MultiPolygon to types layer (our primary template)
-- `53822e8b6` — added MultiPolygon to GraphQL layer
+- `17e96f736` — added MultiPolygon: a single commit covering DQL types, parser, query layer, and docs. This is our primary template. At the time, Dgraph had no GraphQL layer — only `gql/` parser code.
+- `53822e8b6` — added GraphQL support for Polygon/MultiPolygon, years later as an independent feature. GraphQL-only change with schema/rewriter/testdata churn. Shows the GraphQL surface as self-contained.
 
 ## Architecture
 
