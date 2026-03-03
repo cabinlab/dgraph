@@ -18,16 +18,10 @@
 - [x] **End-to-end DQL validation**: All 4 geo functions (near, within, contains, intersects) verified with all 6 stored types + LineString/MultiLineString/MultiPoint as query arguments
 - [x] **End-to-end GraphQL validation**: GraphQL mutations (addPlace) and queries (queryPlace with near/within/intersects filters) verified for all 3 new geo types with correct response shapes
 
-### Known Issue (RESOLVED)
-The `dgraph-alpha` container previously crashed with:
-```
-At least a point or loop should be defined.
-types.GeoQueryData.contains (geofilter.go:386)
-```
-**Root cause:** The original `isWithin()` and `contains()` methods had `AssertTruef` guards that only checked `q.pt != nil || len(q.loops) > 0`. When new query types (polylines, pts) were used, the assertion fired. **Fix committed** in `16fb8f23` — assertions now include `q.polylines` and `q.pts`. Alpha now starts and stays healthy.
-
-### Bug Found This Session
-`query/outputnode_graphql.go:completeGeoObject` only handled Point/Polygon/MultiPolygon in its switch. LineString/MultiLineString/MultiPoint hit the `default` case returning `"unsupported geo type"`. This means GraphQL queries that return new geo types would fail at response serialization. Fixed by adding 3 new completion functions + a `writeCoordinateArray` helper. Compiles clean, builds clean.
+### Bugs Found and Fixed
+1. **Assertion crash** (commit `16fb8f23`): `isWithin()`/`contains()` `AssertTruef` guards only checked `q.pt != nil || len(q.loops) > 0`. New query types (polylines, pts) triggered panic. Fixed to include all query data fields.
+2. **GraphQL response completion** (commit `5ec3effa0`): `completeGeoObject` only handled Point/Polygon/MultiPolygon. New types hit default "unsupported geo type" error. Fixed by adding 3 completion functions + `writeCoordinateArray` helper.
+3. **Stale test expectation** (commit `b1ebde9c8`): `TestGeoFuncWithAfter` expected only 2 results from near() but new geo test fixtures added 3 more entities in the same area.
 
 ---
 
