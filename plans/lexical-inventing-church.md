@@ -89,6 +89,13 @@ Verify diffs are only the expected new geo field additions.
   - Why `TestGeoFuncWithAfter` expected results changed (new test fixtures in near() range)
   - The panic fix and why it's needed despite GraphQL type validation
 
+### 6. Docs (follow-up, not blocking)
+
+Docs moved out of the main repo (no `wiki/` or `docs/` directory). Convention per
+`53822e8` is to note docs needs in the PR and follow up separately. Add a PR description
+note: "Docs update needed for new geo types (query arg forms, GraphQL built-ins,
+contains/intersects semantics)."
+
 ## Commit Sequence
 
 1. `fix(graphql): guard geo filter rewrite against short coordinate arrays`
