@@ -418,6 +418,346 @@ func TestMatchesFilterNearPoint(t *testing.T) {
 	require.True(t, qd.MatchesFilter(poly))
 }
 
+// --- LineString/MultiLineString/MultiPoint filter tests ---
+
+func formDataLineString(t *testing.T, ls *geom.LineString) string {
+	d, err := wkb.Marshal(ls, binary.LittleEndian)
+	require.NoError(t, err)
+	src := ValueForType(GeoID)
+	src.Value = d
+	gd, err := Convert(src, StringID)
+	require.NoError(t, err)
+	return gd.Value.(string)
+}
+
+func formDataMultiLineString(t *testing.T, mls *geom.MultiLineString) string {
+	d, err := wkb.Marshal(mls, binary.LittleEndian)
+	require.NoError(t, err)
+	src := ValueForType(GeoID)
+	src.Value = d
+	gd, err := Convert(src, StringID)
+	require.NoError(t, err)
+	return gd.Value.(string)
+}
+
+func formDataMultiPoint(t *testing.T, mp *geom.MultiPoint) string {
+	d, err := wkb.Marshal(mp, binary.LittleEndian)
+	require.NoError(t, err)
+	src := ValueForType(GeoID)
+	src.Value = d
+	gd, err := Convert(src, StringID)
+	require.NoError(t, err)
+	return gd.Value.(string)
+}
+
+func TestMatchesFilterWithinLineString(t *testing.T) {
+	// Query: within a polygon containing the SF Bay Area
+	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123, 37}, {-121, 37}, {-121, 38}, {-123, 38}, {-123, 37}},
+	})
+	data := formDataPolygon(t, poly)
+	_, qd, err := queryTokens(QueryTypeWithin, data, 0.0)
+	require.NoError(t, err)
+
+	// LineString fully inside the polygon
+	lsInside := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.5}, {-122.0, 37.8},
+	})
+	require.True(t, qd.MatchesFilter(lsInside))
+
+	// LineString partially outside
+	lsPartial := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.5}, {-120.0, 37.5},
+	})
+	require.False(t, qd.MatchesFilter(lsPartial))
+
+	// LineString completely outside
+	lsOutside := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-119.0, 36.0}, {-118.0, 35.0},
+	})
+	require.False(t, qd.MatchesFilter(lsOutside))
+}
+
+func TestMatchesFilterWithinMultiLineString(t *testing.T) {
+	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123, 37}, {-121, 37}, {-121, 38}, {-123, 38}, {-123, 37}},
+	})
+	data := formDataPolygon(t, poly)
+	_, qd, err := queryTokens(QueryTypeWithin, data, 0.0)
+	require.NoError(t, err)
+
+	// Both lines inside
+	mlsInside := geom.NewMultiLineString(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-122.5, 37.3}, {-122.0, 37.5}},
+		{{-121.5, 37.6}, {-121.8, 37.9}},
+	})
+	require.True(t, qd.MatchesFilter(mlsInside))
+
+	// One line outside
+	mlsPartial := geom.NewMultiLineString(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-122.5, 37.3}, {-122.0, 37.5}},
+		{{-119.0, 36.0}, {-118.0, 35.0}},
+	})
+	require.False(t, qd.MatchesFilter(mlsPartial))
+}
+
+func TestMatchesFilterWithinMultiPoint(t *testing.T) {
+	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123, 37}, {-121, 37}, {-121, 38}, {-123, 38}, {-123, 37}},
+	})
+	data := formDataPolygon(t, poly)
+	_, qd, err := queryTokens(QueryTypeWithin, data, 0.0)
+	require.NoError(t, err)
+
+	// All points inside
+	mpInside := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.5}, {-121.5, 37.8},
+	})
+	require.True(t, qd.MatchesFilter(mpInside))
+
+	// One point outside
+	mpPartial := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.5}, {-119.0, 36.0},
+	})
+	require.False(t, qd.MatchesFilter(mpPartial))
+}
+
+func TestMatchesFilterContainsLineString(t *testing.T) {
+	// Query with a point, test that stored LineString contains the point.
+	// Use N-S oriented line (same longitude) so the point lies exactly on the great circle arc.
+	p := geom.NewPoint(geom.XY).MustSetCoords(geom.Coord{-122.0, 37.5})
+	data := formDataPoint(t, p)
+	_, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+
+	// LineString along same longitude that passes through the point (N-S line)
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.0}, {-122.0, 38.0},
+	})
+	require.True(t, qd.MatchesFilter(ls))
+
+	// LineString that doesn't pass through the point
+	lsFar := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-123.0, 38.0}, {-123.0, 39.0},
+	})
+	require.False(t, qd.MatchesFilter(lsFar))
+}
+
+func TestMatchesFilterContainsMultiLineString(t *testing.T) {
+	// Use N-S oriented lines so points lie exactly on the great circle arc.
+	p := geom.NewPoint(geom.XY).MustSetCoords(geom.Coord{-122.0, 37.5})
+	data := formDataPoint(t, p)
+	_, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+
+	// MultiLineString where one line passes through the point (N-S line at same longitude)
+	mls := geom.NewMultiLineString(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123.0, 38.0}, {-123.0, 39.0}}, // doesn't pass through
+		{{-122.0, 37.0}, {-122.0, 38.0}}, // passes through (N-S at same lng)
+	})
+	require.True(t, qd.MatchesFilter(mls))
+
+	// MultiLineString where no line passes through
+	mlsFar := geom.NewMultiLineString(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123.0, 38.0}, {-123.0, 39.0}},
+		{{-124.0, 39.0}, {-124.0, 40.0}},
+	})
+	require.False(t, qd.MatchesFilter(mlsFar))
+}
+
+func TestMatchesFilterContainsMultiPoint(t *testing.T) {
+	p := geom.NewPoint(geom.XY).MustSetCoords(geom.Coord{-122.082506, 37.4249518})
+	data := formDataPoint(t, p)
+	_, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+
+	// MultiPoint containing the same point
+	mp := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-123.0, 38.0},
+		{-122.082506, 37.4249518},
+	})
+	require.True(t, qd.MatchesFilter(mp))
+
+	// MultiPoint not containing the query point
+	mpFar := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-123.0, 38.0},
+		{-124.0, 39.0},
+	})
+	require.False(t, qd.MatchesFilter(mpFar))
+}
+
+func TestMatchesFilterIntersectsLineString(t *testing.T) {
+	// Intersect query with a polygon
+	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123, 37}, {-121, 37}, {-121, 38}, {-123, 38}, {-123, 37}},
+	})
+	data := formDataPolygon(t, poly)
+	_, qd, err := queryTokens(QueryTypeIntersects, data, 0.0)
+	require.NoError(t, err)
+
+	// LineString fully inside polygon
+	lsInside := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.5}, {-122.0, 37.8},
+	})
+	require.True(t, qd.MatchesFilter(lsInside))
+
+	// LineString crossing polygon boundary
+	lsCrossing := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.5}, {-120.0, 37.5},
+	})
+	require.True(t, qd.MatchesFilter(lsCrossing))
+
+	// LineString completely outside
+	lsOutside := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-119.0, 36.0}, {-118.0, 35.0},
+	})
+	require.False(t, qd.MatchesFilter(lsOutside))
+}
+
+func TestMatchesFilterIntersectsMultiLineString(t *testing.T) {
+	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123, 37}, {-121, 37}, {-121, 38}, {-123, 38}, {-123, 37}},
+	})
+	data := formDataPolygon(t, poly)
+	_, qd, err := queryTokens(QueryTypeIntersects, data, 0.0)
+	require.NoError(t, err)
+
+	// MultiLineString with one line inside
+	mlsPartial := geom.NewMultiLineString(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-122.5, 37.5}, {-122.0, 37.8}},
+		{{-119.0, 36.0}, {-118.0, 35.0}},
+	})
+	require.True(t, qd.MatchesFilter(mlsPartial))
+
+	// MultiLineString completely outside
+	mlsOutside := geom.NewMultiLineString(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-119.0, 36.0}, {-118.0, 35.0}},
+		{{-117.0, 34.0}, {-116.0, 33.0}},
+	})
+	require.False(t, qd.MatchesFilter(mlsOutside))
+}
+
+func TestMatchesFilterIntersectsMultiPoint(t *testing.T) {
+	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123, 37}, {-121, 37}, {-121, 38}, {-123, 38}, {-123, 37}},
+	})
+	data := formDataPolygon(t, poly)
+	_, qd, err := queryTokens(QueryTypeIntersects, data, 0.0)
+	require.NoError(t, err)
+
+	// MultiPoint with one point inside
+	mpPartial := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.5},
+		{-119.0, 36.0},
+	})
+	require.True(t, qd.MatchesFilter(mpPartial))
+
+	// MultiPoint completely outside
+	mpOutside := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-119.0, 36.0},
+		{-117.0, 34.0},
+	})
+	require.False(t, qd.MatchesFilter(mpOutside))
+}
+
+func TestQueryTokensLineStringContains(t *testing.T) {
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.0}, {-122.5, 37.5},
+	})
+	data := formDataLineString(t, ls)
+	toks, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+	require.NotEmpty(t, toks)
+	require.NotNil(t, qd)
+	require.NotEmpty(t, qd.polylines)
+}
+
+func TestQueryTokensLineStringIntersects(t *testing.T) {
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.0}, {-122.5, 37.5},
+	})
+	data := formDataLineString(t, ls)
+	toks, qd, err := queryTokens(QueryTypeIntersects, data, 0.0)
+	require.NoError(t, err)
+	require.NotEmpty(t, toks)
+	require.NotNil(t, qd)
+	require.NotEmpty(t, qd.polylines)
+}
+
+func TestQueryTokensLineStringWithinError(t *testing.T) {
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.0}, {-122.5, 37.5},
+	})
+	data := formDataLineString(t, ls)
+	_, _, err := queryTokens(QueryTypeWithin, data, 0.0)
+	require.Error(t, err)
+}
+
+func TestQueryTokensLineStringNearError(t *testing.T) {
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.0}, {-122.5, 37.5},
+	})
+	data := formDataLineString(t, ls)
+	_, _, err := queryTokens(QueryTypeNear, data, 1000.0)
+	require.Error(t, err)
+}
+
+func TestQueryTokensMultiPointContains(t *testing.T) {
+	mp := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.0}, {-122.5, 37.5},
+	})
+	data := formDataMultiPoint(t, mp)
+	toks, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+	require.NotEmpty(t, toks)
+	require.NotNil(t, qd)
+	require.NotEmpty(t, qd.pts)
+}
+
+func TestIntersectsLineStringWithLineStringQuery(t *testing.T) {
+	// Intersect query argument is a LineString
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.0}, {-122.5, 38.0},
+	})
+	data := formDataLineString(t, ls)
+	_, qd, err := queryTokens(QueryTypeIntersects, data, 0.0)
+	require.NoError(t, err)
+
+	// Stored LineString that crosses the query line
+	lsCross := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-123.0, 37.5}, {-122.0, 37.5},
+	})
+	require.True(t, qd.MatchesFilter(lsCross))
+
+	// Stored LineString that doesn't cross
+	lsNoIntersect := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-121.0, 36.0}, {-120.0, 35.0},
+	})
+	require.False(t, qd.MatchesFilter(lsNoIntersect))
+}
+
+func TestIntersectsMultiPointWithLineStringQuery(t *testing.T) {
+	// Use N-S line so points lie exactly on the great circle arc.
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.0}, {-122.0, 38.0},
+	})
+	data := formDataLineString(t, ls)
+	_, qd, err := queryTokens(QueryTypeIntersects, data, 0.0)
+	require.NoError(t, err)
+
+	// MultiPoint with a point on the line (same longitude)
+	mp := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.5},
+	})
+	require.True(t, qd.MatchesFilter(mp))
+
+	// MultiPoint not on the line
+	mpFar := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-123.0, 37.5},
+	})
+	require.False(t, qd.MatchesFilter(mpFar))
+}
+
 func BenchmarkMatchesFilterContainsPoint(b *testing.B) {
 	us, _ := loadPolygon("testdata/us.json")
 	b.ResetTimer()

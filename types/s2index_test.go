@@ -91,6 +91,69 @@ func TestIndexCellsPolygon(t *testing.T) {
 	require.True(t, len(parents) > len(cover))
 }
 
+func TestIndexCellsLineString(t *testing.T) {
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.0}, {-122.5, 37.5}, {-123.0, 38.0},
+	})
+	parents, cover, err := indexCells(ls)
+	require.NoError(t, err)
+	require.NotEmpty(t, parents)
+	require.NotEmpty(t, cover)
+	require.True(t, len(parents) > len(cover))
+}
+
+func TestIndexGeoTokensLineString(t *testing.T) {
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.0, 37.0}, {-122.5, 37.5}, {-123.0, 38.0},
+	})
+	tokens, err := IndexGeoTokens(ls)
+	require.NoError(t, err)
+	require.NotEmpty(t, tokens)
+}
+
+func TestIndexCellsMultiLineString(t *testing.T) {
+	mls := geom.NewMultiLineString(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-122.0, 37.0}, {-122.5, 37.5}},
+		{{-123.0, 38.0}, {-123.5, 38.5}, {-124.0, 39.0}},
+	})
+	parents, cover, err := indexCells(mls)
+	require.NoError(t, err)
+	require.NotEmpty(t, parents)
+	require.NotEmpty(t, cover)
+}
+
+func TestIndexGeoTokensMultiLineString(t *testing.T) {
+	mls := geom.NewMultiLineString(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-122.0, 37.0}, {-122.5, 37.5}},
+		{{-123.0, 38.0}, {-123.5, 38.5}},
+	})
+	tokens, err := IndexGeoTokens(mls)
+	require.NoError(t, err)
+	require.NotEmpty(t, tokens)
+}
+
+func TestIndexCellsMultiPoint(t *testing.T) {
+	mp := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.082506, 37.4249518},
+		{-73.935242, 40.730610},
+		{-87.6298, 41.8781},
+	})
+	parents, cover, err := indexCells(mp)
+	require.NoError(t, err)
+	require.NotEmpty(t, parents)
+	require.NotEmpty(t, cover)
+}
+
+func TestIndexGeoTokensMultiPoint(t *testing.T) {
+	mp := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.082506, 37.4249518},
+		{-73.935242, 40.730610},
+	})
+	tokens, err := IndexGeoTokens(mp)
+	require.NoError(t, err)
+	require.NotEmpty(t, tokens)
+}
+
 func TestIndexCellsPolygonError(t *testing.T) {
 	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
 		{{-122, 37}, {-123, 37}, {-123, 38}, {-122, 38}, {-122, 38}}})
