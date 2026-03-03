@@ -90,6 +90,34 @@ func indexCells(g geom.T) (parents, cover s2.CellUnion, err error) {
 		// Get parents for all cells in cover.
 		parents := getParentCells(cover, MinCellLevel)
 		return parents, cover, nil
+	case *geom.LineString:
+		pl, err := polylineFromLineString(v)
+		if err != nil {
+			return nil, nil, err
+		}
+		cover := coverPolyline(pl, MinCellLevel, MaxCellLevel, MaxCells)
+		parents := getParentCells(cover, MinCellLevel)
+		return parents, cover, nil
+	case *geom.MultiLineString:
+		var cover s2.CellUnion
+		for i := 0; i < v.NumLineStrings(); i++ {
+			pl, err := polylineFromLineString(v.LineString(i))
+			if err != nil {
+				return nil, nil, err
+			}
+			cover = append(cover, coverPolyline(pl, MinCellLevel, MaxCellLevel, MaxCells)...)
+		}
+		parents := getParentCells(cover, MinCellLevel)
+		return parents, cover, nil
+	case *geom.MultiPoint:
+		var cover s2.CellUnion
+		var parents s2.CellUnion
+		for i := 0; i < v.NumPoints(); i++ {
+			p, c := indexCellsForPoint(v.Point(i), MinCellLevel, MaxCellLevel)
+			parents = append(parents, p...)
+			cover = append(cover, c...)
+		}
+		return parents, cover, nil
 	default:
 		return nil, nil, errors.Errorf("Cannot index geometry of type %T", v)
 	}
@@ -215,6 +243,16 @@ func coverLoop(l *s2.Loop, minLevel int, maxLevel int, maxCells int) s2.CellUnio
 		MaxCells: maxCells,
 	}
 	return rc.Covering(l)
+}
+
+func coverPolyline(pl *s2.Polyline, minLevel, maxLevel, maxCells int) s2.CellUnion {
+	rc := &s2.RegionCoverer{
+		MinLevel: minLevel,
+		MaxLevel: maxLevel,
+		LevelMod: 0,
+		MaxCells: maxCells,
+	}
+	return rc.Covering(pl)
 }
 
 // appendTokens creates tokens with a certain prefix and append.

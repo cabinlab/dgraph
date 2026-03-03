@@ -150,6 +150,24 @@ func convertToGeom(str string) (geom.T, error) {
 			if err := closed(v); err != nil {
 				return nil, err
 			}
+		case *geom.LineString:
+			if v.NumCoords() < 2 {
+				return nil, errors.Errorf("LineString must have at least 2 coordinates, got %d", v.NumCoords())
+			}
+		case *geom.MultiLineString:
+			if v.NumLineStrings() < 1 {
+				return nil, errors.Errorf("MultiLineString must have at least 1 line")
+			}
+			for i := 0; i < v.NumLineStrings(); i++ {
+				if v.LineString(i).NumCoords() < 2 {
+					return nil, errors.Errorf("LineString %d in MultiLineString must have at least 2 coordinates, got %d",
+						i, v.LineString(i).NumCoords())
+				}
+			}
+		case *geom.MultiPoint:
+			if v.NumPoints() < 1 {
+				return nil, errors.Errorf("MultiPoint must have at least 1 point")
+			}
 		}
 		return g, nil
 	}
@@ -208,4 +226,46 @@ func convertToGeom(str string) (geom.T, error) {
 		return g.Decode()
 	}
 	return nil, errors.Errorf("Invalid coordinates")
+}
+
+// polylineFromLineString converts a geom.LineString to an s2.Polyline.
+func polylineFromLineString(ls *geom.LineString) (*s2.Polyline, error) {
+	n := ls.NumCoords()
+	if n < 2 {
+		return nil, errors.Errorf("LineString must have at least 2 coordinates, got %d", n)
+	}
+	pts := make([]s2.Point, n)
+	for i := 0; i < n; i++ {
+		pts[i] = pointFromCoord(ls.Coord(i))
+	}
+	pl := s2.Polyline(pts)
+	return &pl, nil
+}
+
+func polylinesFromMultiLineString(mls *geom.MultiLineString) ([]*s2.Polyline, error) {
+	n := mls.NumLineStrings()
+	if n == 0 {
+		return nil, errors.Errorf("MultiLineString must have at least 1 line")
+	}
+	polylines := make([]*s2.Polyline, n)
+	for i := 0; i < n; i++ {
+		pl, err := polylineFromLineString(mls.LineString(i))
+		if err != nil {
+			return nil, err
+		}
+		polylines[i] = pl
+	}
+	return polylines, nil
+}
+
+func pointsFromMultiPoint(mp *geom.MultiPoint) ([]s2.Point, error) {
+	n := mp.NumPoints()
+	if n == 0 {
+		return nil, errors.Errorf("MultiPoint must have at least 1 point")
+	}
+	pts := make([]s2.Point, n)
+	for i := 0; i < n; i++ {
+		pts[i] = pointFromPoint(mp.Point(i))
+	}
+	return pts, nil
 }
