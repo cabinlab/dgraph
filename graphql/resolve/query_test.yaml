@@ -793,6 +793,66 @@
       }
     }
 
+- name: "Regression: LineString with short coordinate array does not panic"
+  gqlquery: |
+    query {
+      queryHotel(filter: { route: { contains: { lineString: { coordinates: [[1.0]] } } } }) {
+        name
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(contains(Hotel.route, {"type":"LineString","coordinates":[[0,0]]})) {
+        Hotel.name : Hotel.name
+        dgraph.uid : uid
+      }
+    }
+
+- name: "Regression: MultiLineString with short coordinate array does not panic"
+  gqlquery: |
+    query {
+      queryHotel(filter: { routes: { contains: { multiLineString: { lines: [{ coordinates: [[9.9]] }] } } } }) {
+        name
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(contains(Hotel.routes, {"type":"MultiLineString","coordinates":[[[0,0]]]})) {
+        Hotel.name : Hotel.name
+        dgraph.uid : uid
+      }
+    }
+
+- name: "Regression: MultiPoint with short coordinate array does not panic"
+  gqlquery: |
+    query {
+      queryHotel(filter: { landmarks: { contains: { multiPoint: { points: [[1.0]] } } } }) {
+        name
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(contains(Hotel.landmarks, {"type":"MultiPoint","coordinates":[[0,0]]})) {
+        Hotel.name : Hotel.name
+        dgraph.uid : uid
+      }
+    }
+
+- name: "Regression: LineString with empty coordinate array does not panic"
+  gqlquery: |
+    query {
+      queryHotel(filter: { route: { contains: { lineString: { coordinates: [[]] } } } }) {
+        name
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(contains(Hotel.route, {"type":"LineString","coordinates":[[0,0]]})) {
+        Hotel.name : Hotel.name
+        dgraph.uid : uid
+      }
+    }
+
 - name: ID query
   gqlquery: |
     query {
