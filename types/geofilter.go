@@ -381,6 +381,38 @@ func multiPolygonContainsLoop(g *geom.MultiPolygon, l *s2.Loop) bool {
 	return false
 }
 
+// polylineWithinMultiPolygonLoops returns true if the polyline is fully contained
+// by at least one component polygon of the MultiPolygon.
+func polylineWithinMultiPolygonLoops(g *geom.MultiPolygon, pl *s2.Polyline) bool {
+	for i := range g.NumPolygons() {
+		p := g.Polygon(i)
+		s2loop, err := loopFromPolygon(p)
+		if err != nil {
+			continue
+		}
+		if polylineWithinLoop(pl, s2loop) {
+			return true
+		}
+	}
+	return false
+}
+
+// multiPolygonContainsPoint returns true if any component polygon of the
+// MultiPolygon contains the given point.
+func multiPolygonContainsPoint(g *geom.MultiPolygon, pt s2.Point) bool {
+	for i := range g.NumPolygons() {
+		p := g.Polygon(i)
+		s2loop, err := loopFromPolygon(p)
+		if err != nil {
+			continue
+		}
+		if s2loop.ContainsPoint(pt) {
+			return true
+		}
+	}
+	return false
+}
+
 // returns true if the geometry represented by g contains the given point/polygon.
 // g is the geom.T representation of the value which is the stored in the DB.
 func (q GeoQueryData) contains(g geom.T) bool {
@@ -404,7 +436,31 @@ func (q GeoQueryData) contains(g geom.T) bool {
 				return false
 			}
 		}
-		return true
+		if len(q.loops) > 0 {
+			return true
+		}
+
+		// Polygon contains LineString/MultiLineString: all segments must be inside.
+		if len(q.polylines) > 0 {
+			for _, pl := range q.polylines {
+				if !polylineWithinLoops(pl, []*s2.Loop{s2loop}) {
+					return false
+				}
+			}
+			return true
+		}
+
+		// Polygon contains MultiPoint: all points must be inside.
+		if len(q.pts) > 0 {
+			for _, p := range q.pts {
+				if !s2loop.ContainsPoint(p) {
+					return false
+				}
+			}
+			return true
+		}
+
+		return false
 	case *geom.MultiPolygon:
 		if q.pt != nil {
 			for j := range v.NumPolygons() {
@@ -420,6 +476,28 @@ func (q GeoQueryData) contains(g geom.T) bool {
 			// All the loops that are part of the query should be part of some loop of v.
 			for _, l := range q.loops {
 				if !multiPolygonContainsLoop(v, l) {
+					return false
+				}
+			}
+			return true
+		}
+
+		// MultiPolygon contains LineString/MultiLineString: each polyline must be
+		// fully contained by at least one component polygon.
+		if len(q.polylines) > 0 {
+			for _, pl := range q.polylines {
+				if !polylineWithinMultiPolygonLoops(v, pl) {
+					return false
+				}
+			}
+			return true
+		}
+
+		// MultiPolygon contains MultiPoint: each point must be inside at least
+		// one component polygon.
+		if len(q.pts) > 0 {
+			for _, p := range q.pts {
+				if !multiPolygonContainsPoint(v, p) {
 					return false
 				}
 			}

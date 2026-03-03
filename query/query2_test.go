@@ -3170,6 +3170,8 @@ func TestGeoWithinLineString(t *testing.T) {
 	// New types: LineString and MultiPoint inside this polygon
 	require.Contains(t, js, "Campus Walk")
 	require.Contains(t, js, "Meeting Points")
+	// NY MultiPolygon (UID 5107) is far from SF — must NOT appear
+	require.NotContains(t, js, "New York")
 }
 
 func TestGeoContainsPointOnLineString(t *testing.T) {
@@ -3229,6 +3231,8 @@ func TestGeoContainsMultiPointArg(t *testing.T) {
 	// Both points are inside polygon 5105 (Mountain View) and 5104 (SF Bay area)
 	require.Contains(t, js, "Mountain View")
 	require.Contains(t, js, "SF Bay area")
+	// NY MultiPolygon (UID 5107) does NOT contain these SF-area points
+	require.NotContains(t, js, "New York")
 }
 
 func TestGeoNearMultiPoint(t *testing.T) {
@@ -3268,6 +3272,8 @@ func TestGeoExistingGeoUnchanged(t *testing.T) {
 	require.Contains(t, js, "Shoreline Amphitheater")
 	require.Contains(t, js, "SF Bay area")
 	require.Contains(t, js, "Mountain View")
+	// Negative: NY (UID 5107) is ~4000km away, must not appear
+	require.NotContains(t, js, "New York")
 }
 
 func TestGeoWithinMultiPoint(t *testing.T) {
