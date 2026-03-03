@@ -1208,7 +1208,7 @@ func (genc *graphQLEncoder) completeAggregateChildren(fj fastJsonNode,
 }
 
 // completeGeoObject builds a json GraphQL result object for the underlying geo type.
-// Currently, it supports Point, Polygon and MultiPolygon.
+// Supports Point, Polygon, MultiPolygon, LineString, MultiLineString, and MultiPoint.
 func completeGeoObject(path []interface{}, field gqlSchema.Field, val map[string]interface{},
 	buf *bytes.Buffer) *x.GqlError {
 	coordinate, _ := val[gqlSchema.Coordinates].([]interface{})
@@ -1224,6 +1224,12 @@ func completeGeoObject(path []interface{}, field gqlSchema.Field, val map[string
 		completePolygon(field, coordinate, buf)
 	case gqlSchema.MultiPolygon:
 		completeMultiPolygon(field, coordinate, buf)
+	case gqlSchema.LineString:
+		completeLineString(field, coordinate, buf)
+	case gqlSchema.MultiLineString:
+		completeMultiLineString(field, coordinate, buf)
+	case gqlSchema.MultiPoint:
+		completeMultiPoint(field, coordinate, buf)
 	default:
 		return field.GqlErrorf(path, "unsupported geo type: %s", typ)
 	}
@@ -1359,6 +1365,115 @@ func completeMultiPolygon(field gqlSchema.Field, multiPolygon []interface{}, buf
 		comma1 = ","
 	}
 	x.Check2(buf.WriteRune('}'))
+}
+
+// completeLineString converts the Dgraph result to GraphQL LineString type.
+// Dgraph output: coordinates: [[22.22,11.11],[16.16,15.15],[21.21,20.2]]
+// GraphQL output: { coordinates: [[22.22, 11.11], [16.16, 15.15], [21.21, 20.2]] }
+func completeLineString(field gqlSchema.Field, coordinate []interface{}, buf *bytes.Buffer) {
+	comma := ""
+
+	x.Check2(buf.WriteRune('{'))
+	for _, f := range field.SelectionSet() {
+		if f.Skip() || !f.Include() {
+			continue
+		}
+
+		x.Check2(buf.WriteString(comma))
+		f.CompleteAlias(buf)
+
+		switch f.Name() {
+		case gqlSchema.Coordinates:
+			writeCoordinateArray(coordinate, buf)
+		case gqlSchema.Typename:
+			x.Check2(buf.WriteString(`"LineString"`))
+		}
+		comma = ","
+	}
+	x.Check2(buf.WriteRune('}'))
+}
+
+// completeMultiLineString converts the Dgraph result to GraphQL MultiLineString type.
+// Dgraph output: coordinates: [[[22.22,11.11],[16.16,15.15]],[[21.21,20.2],[1.1,2.2]]]
+// GraphQL output: { lines: [{ coordinates: [[22.22,11.11],[16.16,15.15]] }, ...] }
+func completeMultiLineString(field gqlSchema.Field, coordinate []interface{}, buf *bytes.Buffer) {
+	comma1 := ""
+
+	x.Check2(buf.WriteRune('{'))
+	for _, f := range field.SelectionSet() {
+		if f.Skip() || !f.Include() {
+			continue
+		}
+
+		x.Check2(buf.WriteString(comma1))
+		f.CompleteAlias(buf)
+
+		switch f.Name() {
+		case gqlSchema.Lines:
+			x.Check2(buf.WriteRune('['))
+			comma2 := ""
+
+			for _, line := range coordinate {
+				x.Check2(buf.WriteString(comma2))
+
+				l, _ := line.([]interface{})
+				completeLineString(f, l, buf)
+
+				comma2 = ","
+			}
+			x.Check2(buf.WriteRune(']'))
+		case gqlSchema.Typename:
+			x.Check2(buf.WriteString(`"MultiLineString"`))
+		}
+		comma1 = ","
+	}
+	x.Check2(buf.WriteRune('}'))
+}
+
+// completeMultiPoint converts the Dgraph result to GraphQL MultiPoint type.
+// Dgraph output: coordinates: [[22.22,11.11],[16.16,15.15],[21.21,20.2]]
+// GraphQL output: { points: [[22.22, 11.11], [16.16, 15.15], [21.21, 20.2]] }
+func completeMultiPoint(field gqlSchema.Field, coordinate []interface{}, buf *bytes.Buffer) {
+	comma := ""
+
+	x.Check2(buf.WriteRune('{'))
+	for _, f := range field.SelectionSet() {
+		if f.Skip() || !f.Include() {
+			continue
+		}
+
+		x.Check2(buf.WriteString(comma))
+		f.CompleteAlias(buf)
+
+		switch f.Name() {
+		case gqlSchema.Points:
+			writeCoordinateArray(coordinate, buf)
+		case gqlSchema.Typename:
+			x.Check2(buf.WriteString(`"MultiPoint"`))
+		}
+		comma = ","
+	}
+	x.Check2(buf.WriteRune('}'))
+}
+
+// writeCoordinateArray writes a raw coordinate array as JSON, e.g. [[1.1,2.2],[3.3,4.4]].
+func writeCoordinateArray(coords []interface{}, buf *bytes.Buffer) {
+	x.Check2(buf.WriteRune('['))
+	comma := ""
+	for _, pt := range coords {
+		x.Check2(buf.WriteString(comma))
+		x.Check2(buf.WriteRune('['))
+		p, _ := pt.([]interface{})
+		innerComma := ""
+		for _, v := range p {
+			x.Check2(buf.WriteString(innerComma))
+			x.Check2(buf.WriteString(fmt.Sprintf("%v", v)))
+			innerComma = ","
+		}
+		x.Check2(buf.WriteRune(']'))
+		comma = ","
+	}
+	x.Check2(buf.WriteRune(']'))
 }
 
 // cantCoerceScalar tells whether a scalar value can be coerced to its corresponding GraphQL scalar.
