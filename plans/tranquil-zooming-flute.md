@@ -56,7 +56,9 @@ Reuses existing `polylineWithinLoops` helper (line 621) and `s2.Loop.ContainsPoi
 
 **Fix for Stored MultiPolygon (line 408-429):**
 
-Before the `return false` at line 429, add equivalent logic: for polylines, check if each polyline is within at least one polygon's loop; for pts, check if each point is inside at least one polygon's loop.
+Before the `return false` at line 429, add equivalent logic.
+
+**Semantic decision: per-component containment, not union.** A MultiPolygon "contains" a geometry if the geometry is contained by at least one component polygon — not by the union of all polygons. This means a LineString that spans from polygon A to polygon B (crossing a gap between them) is NOT contained. This is the same semantic model already used by `isWithin` (`loopWithinMultiloops` at line 273) and `polylineWithinLoops` (line 621). Union-based containment would require constructing a merged polygon, which S2 doesn't support natively and is out of scope.
 
 ```go
 if len(q.polylines) > 0 {
@@ -78,7 +80,7 @@ if len(q.pts) > 0 {
 }
 ```
 
-This needs two small helpers (`polylineWithinMultiPolygonLoops` and `multiPolygonContainsPoint`) that iterate over the MultiPolygon's component polygons — same pattern as `multiPolygonContainsLoop` (line 370).
+Needs two small helpers (`polylineWithinMultiPolygonLoops` and `multiPolygonContainsPoint`) that iterate over component polygons — same pattern as `multiPolygonContainsLoop` (line 370).
 
 ---
 
@@ -108,7 +110,7 @@ All 11 new geo integration tests use only `require.Contains` (positive). Add `re
 - `TestGeoContainsMultiPointArg`: add a test variant where one point is outside the polygon — should exclude that polygon from results
 - `TestGeoExistingGeoUnchanged`: strengthen from `require.Contains` to `require.JSONEq` since this is a regression guard
 
-Also add a new fixture entity in `query/common_test.go` that is deliberately far from the SF Bay test area (e.g., New York region) to serve as a universal negative control — should never appear in any SF-area geo query results.
+Use the existing NY-area MultiPolygon fixture (UID 5107, `common_test.go:1005`) as the negative control — it's already far from the SF Bay test area. Add `require.NotContains` for it (or its name) in relevant tests. No new fixture needed.
 
 ---
 
