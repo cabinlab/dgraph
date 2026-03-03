@@ -2313,7 +2313,11 @@ func buildLineString(lineString map[string]interface{}, buf *bytes.Buffer) {
 	for _, coord := range coords {
 		x.Check2(buf.WriteString(comma))
 		c, _ := coord.([]interface{})
-		x.Check2(buf.WriteString(fmt.Sprintf("[%v,%v]", c[0], c[1])))
+		if len(c) >= 2 {
+			x.Check2(buf.WriteString(fmt.Sprintf("[%v,%v]", c[0], c[1])))
+		} else {
+			x.Check2(buf.WriteString("[0,0]"))
+		}
 		comma = ","
 	}
 	x.Check2(buf.WriteString(`]}`))
@@ -2332,7 +2336,11 @@ func buildMultiLineString(multiLineString map[string]interface{}, buf *bytes.Buf
 		for _, coord := range coords {
 			x.Check2(buf.WriteString(comma))
 			c, _ := coord.([]interface{})
-			x.Check2(buf.WriteString(fmt.Sprintf("[%v,%v]", c[0], c[1])))
+			if len(c) >= 2 {
+				x.Check2(buf.WriteString(fmt.Sprintf("[%v,%v]", c[0], c[1])))
+			} else {
+				x.Check2(buf.WriteString("[0,0]"))
+			}
 			comma = ","
 		}
 		x.Check2(buf.WriteString("]"))
@@ -2348,7 +2356,11 @@ func buildMultiPoint(multiPoint map[string]interface{}, buf *bytes.Buffer) {
 	for _, pt := range points {
 		x.Check2(buf.WriteString(comma))
 		c, _ := pt.([]interface{})
-		x.Check2(buf.WriteString(fmt.Sprintf("[%v,%v]", c[0], c[1])))
+		if len(c) >= 2 {
+			x.Check2(buf.WriteString(fmt.Sprintf("[%v,%v]", c[0], c[1])))
+		} else {
+			x.Check2(buf.WriteString("[0,0]"))
+		}
 		comma = ","
 	}
 	x.Check2(buf.WriteString(`]}`))
