@@ -2125,6 +2125,14 @@ func buildFilter(typ schema.Type, filter map[string]interface{}) *dql.FilterTree
 						buildPolygon(polygon, &buf)
 					} else if point, ok := contains["point"].(map[string]interface{}); ok {
 						buildPoint(point, &buf)
+					} else if multiPolygon, ok := contains["multiPolygon"].(map[string]interface{}); ok {
+						buildMultiPolygon(multiPolygon, &buf)
+					} else if lineString, ok := contains["lineString"].(map[string]interface{}); ok {
+						buildLineString(lineString, &buf)
+					} else if multiLineString, ok := contains["multiLineString"].(map[string]interface{}); ok {
+						buildMultiLineString(multiLineString, &buf)
+					} else if multiPoint, ok := contains["multiPoint"].(map[string]interface{}); ok {
+						buildMultiPoint(multiPoint, &buf)
 					}
 					args = append(args, dql.Arg{Value: buf.String()})
 					// TODO: for both contains and intersects, we should use @oneOf in the inbuilt
@@ -2148,6 +2156,12 @@ func buildFilter(typ schema.Type, filter map[string]interface{}) *dql.FilterTree
 						buildPolygon(polygon, &buf)
 					} else if multiPolygon, ok := intersects["multiPolygon"].(map[string]interface{}); ok {
 						buildMultiPolygon(multiPolygon, &buf)
+					} else if lineString, ok := intersects["lineString"].(map[string]interface{}); ok {
+						buildLineString(lineString, &buf)
+					} else if multiLineString, ok := intersects["multiLineString"].(map[string]interface{}); ok {
+						buildMultiLineString(multiLineString, &buf)
+					} else if multiPoint, ok := intersects["multiPoint"].(map[string]interface{}); ok {
+						buildMultiPoint(multiPoint, &buf)
 					}
 					args = append(args, dql.Arg{Value: buf.String()})
 				default:
@@ -2290,6 +2304,54 @@ func buildMultiPolygon(multipolygon map[string]interface{}, buf *bytes.Buffer) {
 		comma = ","
 	}
 	x.Check2(buf.WriteString("]"))
+}
+
+func buildLineString(lineString map[string]interface{}, buf *bytes.Buffer) {
+	coords, _ := lineString[schema.Coordinates].([]interface{})
+	x.Check2(buf.WriteString(`{"type":"LineString","coordinates":[`))
+	comma := ""
+	for _, coord := range coords {
+		x.Check2(buf.WriteString(comma))
+		c, _ := coord.([]interface{})
+		x.Check2(buf.WriteString(fmt.Sprintf("[%v,%v]", c[0], c[1])))
+		comma = ","
+	}
+	x.Check2(buf.WriteString(`]}`))
+}
+
+func buildMultiLineString(multiLineString map[string]interface{}, buf *bytes.Buffer) {
+	lines, _ := multiLineString[schema.Lines].([]interface{})
+	x.Check2(buf.WriteString(`{"type":"MultiLineString","coordinates":[`))
+	lineComma := ""
+	for _, line := range lines {
+		x.Check2(buf.WriteString(lineComma))
+		l, _ := line.(map[string]interface{})
+		coords, _ := l[schema.Coordinates].([]interface{})
+		x.Check2(buf.WriteString("["))
+		comma := ""
+		for _, coord := range coords {
+			x.Check2(buf.WriteString(comma))
+			c, _ := coord.([]interface{})
+			x.Check2(buf.WriteString(fmt.Sprintf("[%v,%v]", c[0], c[1])))
+			comma = ","
+		}
+		x.Check2(buf.WriteString("]"))
+		lineComma = ","
+	}
+	x.Check2(buf.WriteString(`]}`))
+}
+
+func buildMultiPoint(multiPoint map[string]interface{}, buf *bytes.Buffer) {
+	points, _ := multiPoint[schema.Points].([]interface{})
+	x.Check2(buf.WriteString(`{"type":"MultiPoint","coordinates":[`))
+	comma := ""
+	for _, pt := range points {
+		x.Check2(buf.WriteString(comma))
+		c, _ := pt.([]interface{})
+		x.Check2(buf.WriteString(fmt.Sprintf("[%v,%v]", c[0], c[1])))
+		comma = ","
+	}
+	x.Check2(buf.WriteString(`]}`))
 }
 
 func buildUnionFilter(typ schema.Type, filter map[string]interface{}) (*dql.FilterTree, bool) {

@@ -1032,7 +1032,8 @@ func validateSearchArg(searchArg string,
 }
 
 func isGeoType(typ *ast.Type) bool {
-	if typ.Name() == "Point" || typ.Name() == "Polygon" || typ.Name() == "MultiPolygon" {
+	if typ.Name() == "Point" || typ.Name() == "Polygon" || typ.Name() == "MultiPolygon" ||
+		typ.Name() == "LineString" || typ.Name() == "MultiLineString" || typ.Name() == "MultiPoint" {
 		return true
 	}
 	return false

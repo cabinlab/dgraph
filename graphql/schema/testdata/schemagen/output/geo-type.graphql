@@ -11,6 +11,12 @@ type Hotel {
 	secretArea: Polygon
 	branches: MultiPolygon @search
 	secretBranches: MultiPolygon
+	route: LineString @search
+	secretRoute: LineString
+	routes: MultiLineString @search
+	secretRoutes: MultiLineString
+	landmarks: MultiPoint @search
+	secretLandmarks: MultiPoint
 }
 
 #######################
@@ -153,6 +159,30 @@ input MultiPolygonRef {
 	polygons: [PolygonRef!]!
 }
 
+type LineString {
+	coordinates: [[Float!]!]!
+}
+
+input LineStringRef {
+	coordinates: [[Float!]!]!
+}
+
+type MultiLineString {
+	lines: [LineString!]!
+}
+
+input MultiLineStringRef {
+	lines: [LineStringRef!]!
+}
+
+type MultiPoint {
+	points: [[Float!]!]!
+}
+
+input MultiPointRef {
+	points: [[Float!]!]!
+}
+
 input WithinFilter {
 	polygon: PolygonRef!
 }
@@ -160,11 +190,18 @@ input WithinFilter {
 input ContainsFilter {
 	point: PointRef
 	polygon: PolygonRef
+	multiPolygon: MultiPolygonRef
+	lineString: LineStringRef
+	multiLineString: MultiLineStringRef
+	multiPoint: MultiPointRef
 }
 
 input IntersectsFilter {
 	polygon: PolygonRef
 	multiPolygon: MultiPolygonRef
+	lineString: LineStringRef
+	multiLineString: MultiLineStringRef
+	multiPoint: MultiPointRef
 }
 
 input PolygonGeoFilter {
@@ -324,6 +361,12 @@ enum HotelHasFilter {
 	secretArea
 	branches
 	secretBranches
+	route
+	secretRoute
+	routes
+	secretRoutes
+	landmarks
+	secretLandmarks
 }
 
 enum HotelOrderable {
@@ -342,6 +385,12 @@ input AddHotelInput {
 	secretArea: PolygonRef
 	branches: MultiPolygonRef
 	secretBranches: MultiPolygonRef
+	route: LineStringRef
+	secretRoute: LineStringRef
+	routes: MultiLineStringRef
+	secretRoutes: MultiLineStringRef
+	landmarks: MultiPointRef
+	secretLandmarks: MultiPointRef
 }
 
 input HotelFilter {
@@ -349,6 +398,9 @@ input HotelFilter {
 	location: PointGeoFilter
 	area: PolygonGeoFilter
 	branches: PolygonGeoFilter
+	route: PolygonGeoFilter
+	routes: PolygonGeoFilter
+	landmarks: PolygonGeoFilter
 	has: [HotelHasFilter]
 	and: [HotelFilter]
 	or: [HotelFilter]
@@ -369,6 +421,12 @@ input HotelPatch {
 	secretArea: PolygonRef
 	branches: MultiPolygonRef
 	secretBranches: MultiPolygonRef
+	route: LineStringRef
+	secretRoute: LineStringRef
+	routes: MultiLineStringRef
+	secretRoutes: MultiLineStringRef
+	landmarks: MultiPointRef
+	secretLandmarks: MultiPointRef
 }
 
 input HotelRef {
@@ -380,6 +438,12 @@ input HotelRef {
 	secretArea: PolygonRef
 	branches: MultiPolygonRef
 	secretBranches: MultiPolygonRef
+	route: LineStringRef
+	secretRoute: LineStringRef
+	routes: MultiLineStringRef
+	secretRoutes: MultiLineStringRef
+	landmarks: MultiPointRef
+	secretLandmarks: MultiPointRef
 }
 
 input UpdateHotelInput {

@@ -558,7 +558,8 @@ func dgraphMapping(sch *ast.Schema) map[string]map[string]string {
 		// We only want to consider input types (object and interface) defined by the user as part
 		// of the schema hence we ignore BuiltIn, query and mutation types and Geo types.
 		isInputTypeGeo := func(typName string) bool {
-			return typName == "Point" || typName == "PointList" || typName == "Polygon" || typName == "MultiPolygon"
+			return typName == "Point" || typName == "PointList" || typName == "Polygon" || typName == "MultiPolygon" ||
+				typName == "LineString" || typName == "MultiLineString" || typName == "MultiPoint"
 		}
 		if inputTyp.BuiltIn || isQueryOrMutationType(inputTyp) || inputTyp.Name == "Subscription" ||
 			(inputTyp.Kind != ast.Object && inputTyp.Kind != ast.Interface) || isInputTypeGeo(inputTyp.Name) {
@@ -2283,7 +2284,8 @@ func (t *astType) AuthRules() *TypeAuth {
 }
 
 func (t *astType) IsGeo() bool {
-	return t.Name() == "Point" || t.Name() == "Polygon" || t.Name() == "MultiPolygon"
+	return t.Name() == "Point" || t.Name() == "Polygon" || t.Name() == "MultiPolygon" ||
+		t.Name() == "LineString" || t.Name() == "MultiLineString" || t.Name() == "MultiPoint"
 }
 
 func (t *astType) IsAggregateResult() bool {
