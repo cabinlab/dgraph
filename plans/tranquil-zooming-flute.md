@@ -6,9 +6,9 @@ Branch `feat/s2-geo-new-types` adds LineString, MultiLineString, and MultiPoint 
 
 ## Branch state
 
-- 19 commits on `feat/s2-geo-new-types`, 82 files changed
-- Latest commit: `8bfa924c3` (refactor by team)
-- Cluster running locally (image at `c08341d03`, **does not** include response completion fix or refactor — needs rebuild for GraphQL E2E)
+- 20 commits on `feat/s2-geo-new-types`, 82 files changed
+- Latest commit: `9ffa3ce57` (plan file)
+- Cluster running locally (image at `c08341d03`, **does not** include response completion fix or refactor — needs rebuild for E2E)
 
 ---
 
