@@ -118,9 +118,14 @@ Use the existing NY-area MultiPolygon fixture (UID 5107, `common_test.go:1005`) 
 
 **Current state:** Commit `16fb8f233` bundles a 6-line geo fix with 20 lines of Dockerfile changes (Go 1.25.0→1.25.7, apt version unpinning). This is PR noise.
 
-**Action:** Interactive rebase to split `16fb8f233` into two commits:
-- `fix(geo): update assertion guards for new query data fields` (geofilter.go only)
-- `chore: bump Go to 1.25.7 and unpin apt versions in Dockerfile` (Dockerfile only)
+**Action:** Deterministic non-interactive split using `git rebase` with a sequence of `git reset HEAD~1 --soft`, selective staging, and two new commits. No interactive editor needed:
+1. Start rebase: `git rebase --onto <parent-of-16fb8f23> <parent-of-16fb8f23> feat/s2-geo-new-types` (or `git rebase <parent>`)
+2. At the target commit, `git reset HEAD~1` to unstage
+3. `git add types/geofilter.go` → commit `fix(geo): update assertion guards for new query data fields`
+4. `git add Dockerfile` → commit `chore: bump Go to 1.25.7 and unpin apt versions in Dockerfile`
+5. `git rebase --continue`
+
+Alternatively, if the rebase proves fiddly with this many downstream commits, just leave it — it's cosmetic noise, not a functional issue. The geo fix and Dockerfile change are both independently correct.
 
 ---
 
@@ -130,8 +135,12 @@ After all fixes:
 
 1. `go test ./types/... -run Contains -v -count=1` — verify new unit tests pass
 2. `go test ./types/... -v -count=1` — full types suite (existing 82 tests + new)
-3. Rebuild Docker image: `docker build -t dgraph/dgraph:local .` from dgraph dir
-4. Restart alpha: `docker compose restart dgraph-alpha`
+3. Rebuild Docker image and recreate container (from repo root, not dgraph subdir):
+   ```
+   docker compose up -d --build --force-recreate dgraph-alpha
+   ```
+   **Note:** `docker compose restart` reuses the old image — `--build --force-recreate` is required to pick up code changes.
+4. Wait for alpha health: `curl http://localhost:8080/health` until status=healthy
 5. `go test ./query/... -tags=integration -run Geo -v -count=1` — all integration tests
 6. Manual DQL smoke: `contains(geometry, MultiPoint)` and `contains(geometry, LineString)` against the live cluster — verify no false positives for polygons that don't actually contain the query geometry
 
