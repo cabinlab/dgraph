@@ -1,334 +1,289 @@
-# Plan: Add LineString, MultiLineString, MultiPoint to Dgraph Geo Support
+# Plan: Add LineString, MultiLineString, and MultiPoint to Dgraph Geo (S2) Support
 
-## Context
+## Intent
+`17e96f7` is the floor, not the ceiling. For the new geo types, we will deliver an equivalent-or-better scope in current v25 architecture: types/indexing/filtering, parser implications, integration tests, and GraphQL surface support.
 
-Dgraph supports 3 of 7 GeoJSON geometry types: Point, Polygon, MultiPolygon. The remaining types — **LineString**, **MultiLineString**, **MultiPoint** — were requested in [dgraph-io/dgraph#2316](https://github.com/dgraph-io/dgraph/issues/2316) (April 2018), officially accepted (`status/accepted`, `priority/P2`), and lost in the July 2020 forum migration. GeometryCollection is a stretch goal only (rare in practice, architecturally different).
+## Reference Baseline
+1. Prior accepted request context: `dgraph-io/dgraph#2316`.
+2. Precedent commits:
+- `17e96f736`: MultiPolygon types-layer + query integration pattern.
+- `53822e8b6`: MultiPolygon GraphQL-layer expansion pattern.
 
-We develop to upstream-PR quality — a single complete feature covering DQL and GraphQL layers, tested end-to-end, that would be accepted on first submission if we chose to PR it.
+## Goal
+Add first-class support for GeoJSON `LineString`, `MultiLineString`, and `MultiPoint` for `geo` predicates so they can be:
+1. Stored and indexed.
+2. Queried through DQL geo functions (`near`, `within`, `contains`, `intersects`).
+3. Used through GraphQL built-in geo types and geo filters.
 
-**Key technical finding**: `s2.Polyline` implements `s2.Region` (verified: has `CapBound`, `RectBound`, `ContainsCell`, `IntersectsCell`, `CellUnionBound`). `RegionCoverer.Covering()` works directly on it. The covering strategy for LineString follows the same pattern as Polygon — no custom cell computation needed.
-
-**Reference commits** (as code templates, not process templates):
-- `17e96f736` — added MultiPolygon: single commit touching types, parser, query, docs. Predates Dgraph's GraphQL layer entirely. Best template for types-layer changes.
-- `53822e8b6` — added GraphQL geo support (Polygon/MultiPolygon) as an independent later feature. Best template for GraphQL-layer changes.
+## Non-Goals
+1. `GeometryCollection` support.
+2. Changing geo token key format (`p/`, `c/`) or index constants.
+3. Backward-incompatible DQL syntax changes.
 
 ## Architecture
+Three layers plus GraphQL projection:
+1. Parse/Storage layer:
+- Input geometry parsing into `geom.T`.
+- Storage remains unchanged: `GeoID` + WKB binary serialization/deserialization.
+2. Indexing layer:
+- `geom.T` to S2 parent/cover tokens.
+3. Filter layer:
+- Token prefilter + exact geometry check (`MatchGeo` path) with deterministic mismatch behavior.
+4. GraphQL layer:
+- Built-in geo type exposure + mutation/query rewriting + response completion.
 
-Three layers, each type must pass through all of them:
+No storage schema migration is required.
 
-```
-Layer 1: Parsing & Storage    — GeoJSON/raw coords ↔ geom.T ↔ WKB binary
-Layer 2: Indexing              — geom.T → S2 cell tokens (parent + cover)
-Layer 3: Query Filtering       — S2 token lookup → exact geometry matching
-```
+## Architecture and Compatibility Decisions
+1. Keep existing bracket shorthand behavior unchanged:
+- `[` => Point
+- `[[[` => Polygon
+- `[[[[` => MultiPolygon
 
-Plus the GraphQL schema layer on top.
+2. Resolve bracket ambiguity by requiring GeoJSON object form for ambiguous new shapes in both mutation and query inputs:
+- `LineString`, `MultiLineString`, `MultiPoint` must be supplied as GeoJSON objects (`{\"type\":...,\"coordinates\":...}`) where user-provided string geometry is involved.
+- Existing shorthand arrays for Point/Polygon/MultiPolygon remain unchanged.
 
-**Storage**: Single `GeoID` type for all geo subtypes. WKB binary format already handles all `geom.T` types transparently — no storage layer changes needed.
+3. Maintain current dimensional constraints:
+- `near` remains point + distance only.
+- `within` remains area query (`Polygon`/`MultiPolygon`) only.
 
-**Parser**: `dql/parser.go` (`parseGeoArgs`) already handles bracket depth up to 4. No parser changes needed.
+4. Reuse S2 primitives already available in dependency stack:
+- `s2.Polyline` for line geometry covering and intersection checks.
+- Existing `s2.Loop` logic for polygonal regions.
+5. Explicit covering rationale:
+- `s2.Polyline` satisfies the RegionCoverer contract needed for `RegionCoverer.Covering()`.
+- No bespoke line-cell covering algorithm is introduced.
 
-## Semantics Matrix (Decision-Complete)
+## Key Technical Finding
+`s2.Polyline` already supports the region-covering path used by `s2.RegionCoverer.Covering()`. Therefore, line indexing can use the same covering strategy class as polygons without introducing a custom line-cover algorithm.
 
-New types work as both **stored data** and **query arguments**. Query arguments require GeoJSON format (not raw bracket coordinates — see Bracket Ambiguity section).
+## Decision-Complete Semantics
 
-### Stored data behavior
+### A. Stored geometry behavior (existing query arg forms + new GeoJSON query forms)
+1. `near(point, distance)`:
+- Stored `LineString`: true if line intersects near-cap loop.
+- Stored `MultiLineString`: true if any line intersects near-cap loop.
+- Stored `MultiPoint`: true if any point is inside near-cap loop.
 
-| Query function | Stored LineString | Stored MultiLineString | Stored MultiPoint |
-|---|---|---|---|
-| `near(point, dist)` | Match if line intersects near-loop | Match if any line intersects near-loop | Match if any point inside near-loop |
-| `within(polygon)` | Match if entire line within query loop | Match if every line within some query loop | Match if every point within some query loop |
-| `contains(point)` | Match if point lies on any segment | Match if point on any segment of any line | Match if any stored point equals query point |
-| `contains(polygon)` | false (dimensional mismatch) | false | false |
-| `intersects(polygon)` | Match if any segment crosses loop or any vertex inside loop | Match if any constituent line intersects | Match if any point inside loop |
+2. `within(polygon|multipolygon)`:
+- Stored `LineString`: true iff all segments are inside query region and no segment crosses out.
+- Stored `MultiLineString`: true iff every component line satisfies within.
+- Stored `MultiPoint`: true iff every point is inside query region.
 
-### Query argument behavior
+3. `contains(queryGeom)`:
+- Stored `LineString`:
+  - contains(point): true if point lies on any segment.
+  - contains(any non-point): false. *(Deliberate simplification: sub-segment overlap on a sphere with floating-point tolerance is intractable for practical purposes. Document in code comments.)*
+- Stored `MultiLineString`:
+  - contains(point): true if point lies on any segment of any line.
+  - contains(any non-point): false. *(Same simplification as LineString.)*
+- Stored `MultiPoint`:
+  - contains(point): true if any stored point equals query point.
+  - contains(any non-point): false.
 
-New types as arguments to geo functions, matched against stored data:
+4. `intersects(queryGeom)`:
+- Stored `LineString`: true if any segment intersects query geometry or any relevant vertex inclusion check succeeds.
+- Stored `MultiLineString`: true if any component line intersects.
+- Stored `MultiPoint`: true if any point intersects query geometry (point-in-region or equality depending query type).
 
-| Query function | LineString as argument | MultiPoint as argument |
-|---|---|---|
-| `intersects` | Polyline-vs-stored intersection | Each point tested against stored geometry |
-| `contains` | Stored polygon must fully contain line | Stored polygon must contain all points |
-| `within` | Not meaningful (lines have no area) — error | Not meaningful — error |
+### B. Query argument behavior matrix
 
-**Design rule**: Where a type combination doesn't make geometric sense, return `false` at the filter stage for stored data mismatches (consistent with existing behavior). Error only on malformed query arguments.
+| Query function | Point arg | Polygon/MultiPolygon arg | LineString/MultiLineString arg | MultiPoint arg |
+|---|---|---|---|---|
+| `near` | valid | malformed query arg => error | malformed query arg => error | malformed query arg => error |
+| `within` | malformed query arg => error | valid | malformed query arg => error | malformed query arg => error |
+| `contains` | valid | valid | valid | valid |
+| `intersects` | malformed query arg => error | valid | valid | valid |
 
-## Bracket Ambiguity Decision
+### C. Mismatch policy
+1. Malformed query argument shape/type for a function: return an error (query-time validation failure).
+2. Geometrically invalid but well-formed type pairing during filter evaluation: return `false` (no match), not an error.
 
-The raw coordinate parser in `convertToGeom()` infers type from bracket depth:
-- `[` → Point, `[[[` → Polygon, `[[[[` → MultiPolygon
+## Implementation Plan
 
-LineString (`[[`), MultiPoint (`[[`), and MultiLineString (`[[[`) collide with existing patterns. **We do NOT modify the bracket parser.** New types require GeoJSON format:
-```json
-{"type": "LineString", "coordinates": [[lon, lat], [lon, lat], ...]}
-```
+## 1) Types Layer (`types/`)
 
-This is correct because:
-1. The GeoJSON path (`json.Unmarshal` at line 158 of `s2.go`) already handles all types automatically
-2. Bracket-counting was always a convenience shortcut, not a standard
-3. Adding heuristics to disambiguate `[[` would be fragile and break existing Point behavior
-4. Stored data round-trips through WKB binary, so the bracket parser only matters for mutation input and query arguments
+### 1.1 `types/s2.go`
+1. Extend `convertToGeom()` validation path for `LineString`, `MultiLineString`, and `MultiPoint`.
+2. Keep current polygon closed-ring validation intact.
+3. Add helper conversions:
+- `polylineFromLineString(*geom.LineString) (*s2.Polyline, error)`
+- `polylinesFromMultiLineString(*geom.MultiLineString) ([]*s2.Polyline, error)`
+- `pointsFromMultiPoint(*geom.MultiPoint) ([]s2.Point, error)`
+
+### 1.2 `types/s2index.go`
+1. Extend `indexCells(g geom.T)` switch with:
+- `*geom.LineString`
+- `*geom.MultiLineString`
+- `*geom.MultiPoint`
+2. Covering strategy:
+- `LineString`: `RegionCoverer.Covering(polyline)`.
+- `MultiLineString`: union coverings of each polyline.
+- `MultiPoint`: union point covers (`indexCellsForPoint`) for each point.
+3. Add explicit helper parallel to `coverLoop` for implementation clarity:
+- `coverPolyline(*s2.Polyline, minLevel, maxLevel, maxCells int) s2.CellUnion`
+4. Parent derivation remains via `getParentCells`.
+
+### 1.3 `types/geofilter.go`
+1. Extend `GeoQueryData` to carry:
+- query point (`pt`), point collections (`pts`), loops (`loops`), polylines (`polylines`).
+2. Extend `queryTokensGeo()` to parse/build query representations for new geometry types.
+3. Extend `isWithin`, `contains`, `intersects` switch handling for stored:
+- `*geom.LineString`
+- `*geom.MultiLineString`
+- `*geom.MultiPoint`
+4. Add focused helper ops:
+- point-on-polyline with explicit tolerance
+- polyline-within-loop
+- polyline-intersects-loop
+- multipoint-in-loops checks
+
+5. Pre-decided helper algorithms:
+- `point-on-polyline`:
+  - Use `s2.DistanceFromSegment(queryPt, segA, segB)` per segment.
+  - Define `lineContainsPointEpsilon = s1.Angle(1e-9)` and treat as on-line when distance <= epsilon.
+- `polyline-within-loop`:
+  - Every vertex must be inside target loop.
+  - No polyline segment may cross any loop edge.
+- `polyline-intersects-loop`:
+  - True if any vertex is inside loop OR any segment crosses any loop edge.
+
+### 1.4 `types/*_test.go`
+1. `s2_test.go`: parse/validation for new GeoJSON types and invalid shape cases.
+2. `s2index_test.go`: index coverage tests for all new types.
+3. `geofilter_test.go`: function-by-function semantics tests for all new types.
+
+## 2) DQL Layer (`dql/`, `query/`)
+
+### 2.1 `dql/parser.go` + `dql/parser_test.go`
+1. No parser behavior change is intended.
+2. Add tests to lock intended behavior:
+- Existing bracket shorthand unaffected.
+- GeoJSON-object query arguments for new types parse correctly.
+- Ambiguous shorthand arrays are not reinterpreted.
+3. Only if implementation proves parser behavior blocks required valid input, add the minimal parser change with dedicated regression coverage.
+
+### 2.2 `query/common_test.go`
+1. Add fixture helpers:
+- `addGeoLineStringToCluster`
+- `addGeoMultiLineStringToCluster`
+- `addGeoMultiPointToCluster`
+2. Seed representative data into existing geo predicate fixtures.
+
+### 2.3 `query/query1_test.go` / `query/query2_test.go`
+1. Add end-to-end DQL tests for each function with each new stored type.
+2. Include positive and negative cases, including edge and boundary behavior.
+3. Add regression tests proving legacy point/polygon/multipolygon behavior remains unchanged.
+
+## 3) GraphQL Layer (`graphql/schema`, `graphql/resolve`)
+
+### 3.1 `graphql/schema/gqlschema.go`
+1. Add built-in types and refs:
+- `LineString`, `LineStringRef`
+- `MultiLineString`, `MultiLineStringRef`
+- `MultiPoint`, `MultiPointRef`
+2. Wire search/index maps:
+- `supportedSearches`
+- `defaultSearches`
+- `builtInFilters`
+- `inbuiltTypeToDgraph`
+3. Update geo constants used by resolvers/rewriters.
+
+### 3.2 `graphql/schema/rules.go`, `graphql/schema/wrappers.go`
+1. Update geo-type recognition (`IsGeo`, geo reserved handling).
+2. Ensure generated schema and validation paths treat new geo types as inbuilt geo.
+
+### 3.3 `graphql/resolve/mutation_rewriter.go`
+1. Add coordinate rewrite functions for new geo input structures.
+2. Extend geo rewrite dispatcher to output correct Dgraph JSON GeoJSON shapes.
+
+### 3.4 `graphql/resolve/query_rewriter.go`
+1. Add builders for new geo filter input objects.
+2. Emit unambiguous DQL arguments for new query-argument geometries (GeoJSON object form where necessary).
+
+### 3.5 `graphql/resolve/resolver.go`
+1. Extend geo completion/serialization for response projection of new types.
+
+### 3.6 GraphQL tests
+1. Extend existing YAML suites:
+- `graphql/resolve/add_mutation_test.yaml`
+- `graphql/resolve/update_mutation_test.yaml`
+- `graphql/resolve/query_test.yaml`
+- relevant `graphql/schema` test fixtures.
+2. Cover add/update/query round-trips for all three new geo types.
+
+## 4) Documentation and Notes
+1. Update in-repo geo function docs/comments where type lists are hardcoded.
+2. If docs source is not in this repo, add clear code comments and release-note/changelog entry in repo conventions.
 
 ## Development Order
+1. Types layer for `MultiPoint`.
+2. Types layer for `LineString` and `MultiLineString`.
+3. DQL parser/query test lock-in for ambiguity and regressions.
+4. GraphQL schema/rewriter/resolver support for all three types.
+5. End-to-end test sweep and doc updates.
 
-Build incrementally for development sanity, but the deliverable is one complete feature.
+## Commit Strategy
+1. `feat(geo): add MultiPoint indexing and filtering support`
+2. `feat(geo): add LineString and MultiLineString indexing and filtering support`
+3. `feat(graphql): add LineString/MultiLineString/MultiPoint geo types and rewrites`
+4. `test(geo): add DQL and GraphQL regression/integration coverage`
+5. `docs(geo): update supported geometry type documentation`
 
-1. **Types layer: MultiPoint** — simplest, validates understanding of the pattern
-2. **Types layer: LineString + MultiLineString** — new S2 primitive (Polyline)
-3. **GraphQL layer: all three types** — schema, mutation/query rewriting, result serialization
-4. **Integration tests + manual verification** — end-to-end DQL and GraphQL
+## Verification Plan
 
----
+### Tier 1: Fast correctness gates (on every iteration)
+1. `go test ./types/...`
+2. `go test ./dql/...`
+3. `go test ./query/... -run Geo`
+4. `go test ./graphql/schema/...`
+5. `go test ./graphql/resolve/...`
 
-## Types Layer: MultiPoint
+### Tier 2: Targeted regressions
+1. Existing geo tests unchanged pass rate.
+2. Parser tests for geo arg forms pass.
+3. GraphQL geo mutation/query fixtures pass.
 
-MultiPoint is a collection of Points. Every operation decomposes to existing Point logic.
+### Tier 3: Full quality gate
+1. `trunk check` (or project-standard lint/format/test target).
+2. Full CI-equivalent local target if available.
 
-### `types/s2index.go` — `indexCells()` switch (line 67)
-
-Add `case *geom.MultiPoint`: iterate points, index each, union cell coverages:
-```go
-case *geom.MultiPoint:
-    var cover s2.CellUnion
-    for i := range v.NumPoints() {
-        p := v.Point(i)
-        _, c := indexCellsForPoint(p, MinCellLevel, MaxCellLevel)
-        cover = append(cover, c...)
-    }
-    parents := getParentCells(cover, MinCellLevel)
-    return parents, cover, nil
-```
-
-### `types/s2.go` — `convertToGeom()` (line 124)
-
-- GeoJSON path: already works — `geojson.Geometry.Decode()` returns `*geom.MultiPoint`
-- Raw bracket path: no changes (ambiguous at `[[`)
-- Add `*geom.MultiPoint` passthrough in `validate()` (no closed-loop check needed)
-
-### `types/geofilter.go`
-
-**Struct** — `GeoQueryData` (line 37): add fields for new types:
-```go
-type GeoQueryData struct {
-    pt        *s2.Point
-    pts       []s2.Point     // NEW: for MultiPoint queries
-    loops     []*s2.Loop
-    polylines []*s2.Polyline  // NEW: for LineString queries (Phase 2)
-    qtype     QueryType
-}
-```
-
-**`queryTokensGeo()`** (line 119): add `case *geom.MultiPoint` — convert each point to s2.Point, store in `pts`.
-
-**`isWithin()`**: add `case *geom.MultiPoint` — all points must be within some query loop.
-
-**`contains()`**: add `case *geom.MultiPoint` — if query is a point, match if any stored point equals it. If query is polygon, false.
-
-**`intersects()`**: add `case *geom.MultiPoint` — any point inside any query loop.
-
----
-
-## Types Layer: LineString + MultiLineString
-
-### New helper functions in `types/s2index.go`
-
-```go
-func polylineFromLineString(ls *geom.LineString) (*s2.Polyline, error) {
-    n := ls.NumCoords()
-    if n < 2 {
-        return nil, errors.Errorf("LineString requires at least 2 points")
-    }
-    pts := make(s2.Polyline, n)
-    for i := range n {
-        pts[i] = pointFromCoord(ls.Coord(i))
-    }
-    return &pts, nil
-}
-
-func coverPolyline(pl *s2.Polyline, minLevel, maxLevel, maxCells int) s2.CellUnion {
-    rc := &s2.RegionCoverer{MinLevel: minLevel, MaxLevel: maxLevel, MaxCells: maxCells}
-    return rc.Covering(pl)
-}
-```
-
-### `types/s2index.go` — `indexCells()`
-
-- `case *geom.LineString`: convert to Polyline, cover, get parents
-- `case *geom.MultiLineString`: iterate component LineStrings, cover each, union results
-
-### `types/s2.go` — `convertToGeom()`
-
-- GeoJSON path: already works
-- Add validation in `validate()`: LineString needs >= 2 coords, MultiLineString needs each component >= 2 coords
-
-### `types/geofilter.go`
-
-**`queryTokensGeo()`**: add cases — convert to polylines, compute covering, store in `polylines` field.
-
-**`isWithin()`**: LineString within polygon = all vertices inside loop AND no edges cross boundary:
-```go
-func polylineWithinLoop(pl *s2.Polyline, l *s2.Loop) bool {
-    for _, pt := range *pl {
-        if !l.ContainsPoint(pt) {
-            return false
-        }
-    }
-    // All vertices inside — check no edges cross boundary
-    for i := 0; i < pl.NumEdges(); i++ {
-        edge := pl.Edge(i)
-        for j := 0; j < l.NumEdges(); j++ {
-            loopEdge := l.Edge(j)
-            if s2.CrossingSign(edge.V0, edge.V1, loopEdge.V0, loopEdge.V1) == s2.Cross {
-                return false
-            }
-        }
-    }
-    return true
-}
-```
-
-**`contains(point)`**: Point-on-line check using `s2.Polyline.Project()` + distance threshold. `contains(polygon)` → false (dimensional mismatch).
-
-**`intersects()`**: LineString vs Loop:
-```go
-func polylineIntersectsLoop(pl *s2.Polyline, l *s2.Loop) bool {
-    // Any vertex inside loop → intersects
-    for _, pt := range *pl {
-        if l.ContainsPoint(pt) {
-            return true
-        }
-    }
-    // Any polyline edge crosses any loop edge → intersects
-    for i := 0; i < pl.NumEdges(); i++ {
-        edge := pl.Edge(i)
-        for j := 0; j < l.NumEdges(); j++ {
-            loopEdge := l.Edge(j)
-            if s2.CrossingSign(edge.V0, edge.V1, loopEdge.V0, loopEdge.V1) == s2.Cross {
-                return true
-            }
-        }
-    }
-    return false
-}
-```
-
-Polyline-polyline: use `s2.Polyline.Intersects()` directly.
-
----
-
-## GraphQL Layer (all three types)
-
-### `graphql/schema/gqlschema.go`
-
-**New constants** (~line 80):
-```go
-LineString      = "LineString"
-MultiLineString = "MultiLineString"
-MultiPoint      = "MultiPoint"
-```
-
-**New type definitions** (~line 194):
-```graphql
-type LineString { points: [Point!]! }
-input LineStringRef { points: [PointRef!]! }
-type MultiLineString { lines: [LineString!]! }
-input MultiLineStringRef { lines: [LineStringRef!]! }
-type MultiPoint { points: [Point!]! }
-input MultiPointRef { points: [PointRef!]! }
-```
-
-**Filter types**: Reuse PolygonGeoFilter for new types (same operations supported).
-
-**Map updates**: `supportedSearches`, `defaultSearches`, `builtInFilters`, `inbuiltTypeToDgraph` — add entries mapping new types to `"geo"`.
-
-### `graphql/schema/rules.go`
-- Update `isGeoType()` (line 1034): add LineString, MultiLineString, MultiPoint
-- Update `preludeTypeNames` map (line 273): add new Ref and filter type names
-
-### `graphql/schema/wrappers.go`
-- Update `IsGeo()` method (line 2285)
-- Update `isInputTypeGeo()` closure (line 561)
-
-### `graphql/resolve/mutation_rewriter.go`
-- Add `rewriteLineString()`, `rewriteMultiLineString()`, `rewriteMultiPoint()`
-- Update `rewriteGeoObject()` switch (line 2079)
-
-### `graphql/resolve/query_rewriter.go`
-- Add `buildLineString()`, `buildMultiLineString()`, `buildMultiPoint()`
-- Update filter cases for `contains` and `intersects` to accept new types
-
-### `graphql/resolve/resolver.go`
-- Add `completeLineString()`, `completeMultiLineString()`, `completeMultiPoint()` in `completeGeoObject()`
-
----
-
-## Commit & PR Strategy
-
-**One PR, structured commits.** The feature is incomplete without both DQL and GraphQL layers, and CONTRIBUTING.md explicitly says "Don't ship a half done feature." Clean commit boundaries give reviewers segmentation without splitting the delivery.
-
-Following upstream conventions (Conventional Commits):
-
-1. `feat(geo): add MultiPoint support for indexing and queries`
-2. `feat(geo): add LineString and MultiLineString support for indexing and queries`
-3. `feat(graphql): add LineString, MultiLineString, and MultiPoint geo types`
-4. `test(geo): add integration tests for new geo types`
-5. `docs: update geo type documentation for LineString, MultiLineString, MultiPoint`
-
-Squash/reorganize before any upstream submission.
-
----
-
-## Verification
-
-### Tier 1 — Compile + lint (every edit)
-```bash
-go build ./types/... ./graphql/...
-go vet ./types/... ./graphql/...
-trunk check
-```
-
-### Tier 2 — Unit tests (before pushing)
-```bash
-go test ./types/... -run TestGeo -v
-go test ./graphql/schema/... -v
-go test ./graphql/resolve/... -v
-```
-
-### Tier 3 — Integration (before deployment)
-```bash
-make test PKG=types
-make test PKG=graphql/schema
-make test PKG=graphql/resolve
-make test PKG=query
-```
-
-### Manual verification
-- Docker build via `Dockerfile.dev`
-- `docker compose up` local cluster
-- Mutate LineString/MultiLineString/MultiPoint data via DQL and GraphQL
-- Query with `near`, `within`, `contains`, `intersects`
-- Verify via Ratel visualization
+### Manual validation
+1. Insert representative data for each new type through DQL and GraphQL mutations.
+2. Execute `near`, `within`, `contains`, `intersects` queries from both DQL and GraphQL.
+3. Confirm serialized response shapes for new GraphQL built-ins.
+4. Run local cluster via `docker compose up` and verify results interactively in Ratel.
 
 ## Acceptance Criteria
-
-1. All existing geo tests pass unchanged
-2. New tests cover every cell in the semantics matrix
-3. No parser syntax changes
-4. No index token format or storage format changes
-5. Feature works end-to-end via both DQL and GraphQL
-6. `trunk check` passes
+1. `LineString`, `MultiLineString`, `MultiPoint` are indexable on `geo` predicates.
+2. All four geo functions work with defined semantics for new types.
+3. No regression in existing Point/Polygon/MultiPolygon behavior.
+4. GraphQL supports create/update/query of new geo types end-to-end.
+5. No backward-incompatible parser behavior changes.
+6. Tests cover unit + integration + GraphQL layers for new behavior.
 
 ## Key Files
+1. `types/s2.go`
+2. `types/s2index.go`
+3. `types/geofilter.go`
+4. `types/s2_test.go`
+5. `types/s2index_test.go`
+6. `types/geofilter_test.go`
+7. `dql/parser.go`
+8. `dql/parser_test.go`
+9. `query/common_test.go`
+10. `query/query1_test.go`
+11. `query/query2_test.go`
+12. `graphql/schema/gqlschema.go`
+13. `graphql/schema/rules.go`
+14. `graphql/schema/wrappers.go`
+15. `graphql/resolve/mutation_rewriter.go`
+16. `graphql/resolve/query_rewriter.go`
+17. `graphql/resolve/resolver.go`
+18. GraphQL schema/resolve test YAML files
 
-| File | Changes |
-|------|---------|
-| `types/s2index.go` | indexCells cases + polylineFromLineString + coverPolyline |
-| `types/s2.go` | convertToGeom validation for new types |
-| `types/geofilter.go` | GeoQueryData struct + queryTokensGeo + all filter methods + helpers |
-| `graphql/schema/gqlschema.go` | Type defs, constants, search/filter maps |
-| `graphql/schema/rules.go` | isGeoType, preludeTypeNames |
-| `graphql/schema/wrappers.go` | IsGeo, isInputTypeGeo |
-| `graphql/resolve/mutation_rewriter.go` | rewrite functions + switch |
-| `graphql/resolve/query_rewriter.go` | build functions + filter cases |
-| `graphql/resolve/resolver.go` | complete functions in completeGeoObject |
+## Assumptions
+1. We target a single coherent feature implementation, not a reduced-scope placeholder.
+2. Query-argument ambiguity is solved without breaking legacy shorthand syntax.
+3. Any algorithmic tolerance constants for point-on-line checks will be fixed and documented in tests.
