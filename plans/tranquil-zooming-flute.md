@@ -263,7 +263,9 @@ input MultiPointRef { points: [PointRef!]! }
 
 ---
 
-## Commit Strategy
+## Commit & PR Strategy
+
+**One PR, structured commits.** The feature is incomplete without both DQL and GraphQL layers, and CONTRIBUTING.md explicitly says "Don't ship a half done feature." Clean commit boundaries give reviewers segmentation without splitting the delivery.
 
 Following upstream conventions (Conventional Commits):
 
