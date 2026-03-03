@@ -675,6 +675,124 @@
       }
     }
 
+- name: LineString query contains filter
+  gqlquery: |
+    query {
+      queryHotel(filter: { route: { contains: { lineString: { coordinates: [[1.1, 2.2], [3.3, 4.4]] } } } }) {
+        name
+        route {
+          coordinates
+        }
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(contains(Hotel.route, {"type":"LineString","coordinates":[[1.1,2.2],[3.3,4.4]]})) {
+        Hotel.name : Hotel.name
+        Hotel.route : Hotel.route
+        dgraph.uid : uid
+      }
+    }
+
+- name: LineString query intersects filter
+  gqlquery: |
+    query {
+      queryHotel(filter: { route: { intersects: { lineString: { coordinates: [[1.1, 2.2], [3.3, 4.4]] } } } }) {
+        name
+        route {
+          coordinates
+        }
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(intersects(Hotel.route, {"type":"LineString","coordinates":[[1.1,2.2],[3.3,4.4]]})) {
+        Hotel.name : Hotel.name
+        Hotel.route : Hotel.route
+        dgraph.uid : uid
+      }
+    }
+
+- name: MultiLineString query contains filter
+  gqlquery: |
+    query {
+      queryHotel(filter: { routes: { contains: { multiLineString: { lines: [{ coordinates: [[1.1, 2.2], [3.3, 4.4]] }, { coordinates: [[5.5, 6.6], [7.7, 8.8]] }] } } } }) {
+        name
+        routes {
+          lines {
+            coordinates
+          }
+        }
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(contains(Hotel.routes, {"type":"MultiLineString","coordinates":[[[1.1,2.2],[3.3,4.4]],[[5.5,6.6],[7.7,8.8]]]})) {
+        Hotel.name : Hotel.name
+        Hotel.routes : Hotel.routes
+        dgraph.uid : uid
+      }
+    }
+
+- name: MultiLineString query intersects filter
+  gqlquery: |
+    query {
+      queryHotel(filter: { routes: { intersects: { multiLineString: { lines: [{ coordinates: [[1.1, 2.2], [3.3, 4.4]] }, { coordinates: [[5.5, 6.6], [7.7, 8.8]] }] } } } }) {
+        name
+        routes {
+          lines {
+            coordinates
+          }
+        }
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(intersects(Hotel.routes, {"type":"MultiLineString","coordinates":[[[1.1,2.2],[3.3,4.4]],[[5.5,6.6],[7.7,8.8]]]})) {
+        Hotel.name : Hotel.name
+        Hotel.routes : Hotel.routes
+        dgraph.uid : uid
+      }
+    }
+
+- name: MultiPoint query contains filter
+  gqlquery: |
+    query {
+      queryHotel(filter: { landmarks: { contains: { multiPoint: { points: [[1.1, 2.2], [3.3, 4.4]] } } } }) {
+        name
+        landmarks {
+          points
+        }
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(contains(Hotel.landmarks, {"type":"MultiPoint","coordinates":[[1.1,2.2],[3.3,4.4]]})) {
+        Hotel.name : Hotel.name
+        Hotel.landmarks : Hotel.landmarks
+        dgraph.uid : uid
+      }
+    }
+
+- name: MultiPoint query intersects filter
+  gqlquery: |
+    query {
+      queryHotel(filter: { landmarks: { intersects: { multiPoint: { points: [[1.1, 2.2], [3.3, 4.4]] } } } }) {
+        name
+        landmarks {
+          points
+        }
+      }
+    }
+  dgquery: |-
+    query {
+      queryHotel(func: type(Hotel)) @filter(intersects(Hotel.landmarks, {"type":"MultiPoint","coordinates":[[1.1,2.2],[3.3,4.4]]})) {
+        Hotel.name : Hotel.name
+        Hotel.landmarks : Hotel.landmarks
+        dgraph.uid : uid
+      }
+    }
+
 - name: ID query
   gqlquery: |
     query {

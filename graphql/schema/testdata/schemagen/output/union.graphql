@@ -196,6 +196,30 @@ input MultiPolygonRef {
 	polygons: [PolygonRef!]!
 }
 
+type LineString {
+	coordinates: [[Float!]!]!
+}
+
+input LineStringRef {
+	coordinates: [[Float!]!]!
+}
+
+type MultiLineString {
+	lines: [LineString!]!
+}
+
+input MultiLineStringRef {
+	lines: [LineStringRef!]!
+}
+
+type MultiPoint {
+	points: [[Float!]!]!
+}
+
+input MultiPointRef {
+	points: [[Float!]!]!
+}
+
 input WithinFilter {
 	polygon: PolygonRef!
 }
@@ -203,11 +227,18 @@ input WithinFilter {
 input ContainsFilter {
 	point: PointRef
 	polygon: PolygonRef
+	multiPolygon: MultiPolygonRef
+	lineString: LineStringRef
+	multiLineString: MultiLineStringRef
+	multiPoint: MultiPointRef
 }
 
 input IntersectsFilter {
 	polygon: PolygonRef
 	multiPolygon: MultiPolygonRef
+	lineString: LineStringRef
+	multiLineString: MultiLineStringRef
+	multiPoint: MultiPointRef
 }
 
 input PolygonGeoFilter {

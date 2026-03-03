@@ -7,4 +7,10 @@ type Hotel {
     secretArea: Polygon
     branches: MultiPolygon @search
     secretBranches: MultiPolygon
+    route: LineString @search
+    secretRoute: LineString
+    routes: MultiLineString @search
+    secretRoutes: MultiLineString
+    landmarks: MultiPoint @search
+    secretLandmarks: MultiPoint
 }

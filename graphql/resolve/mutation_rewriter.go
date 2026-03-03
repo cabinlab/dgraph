@@ -2077,7 +2077,7 @@ func rewriteUnionField(
 }
 
 // rewriteGeoObject rewrites the given value correctly based on the underlying Geo type.
-// Currently, it supports Point, Polygon and MultiPolygon.
+// Currently, it supports Point, Polygon, MultiPolygon, LineString, MultiLineString, and MultiPoint.
 func rewriteGeoObject(val map[string]interface{}, typ schema.Type) []interface{} {
 	switch typ.Name() {
 	case schema.Point:
@@ -2086,6 +2086,12 @@ func rewriteGeoObject(val map[string]interface{}, typ schema.Type) []interface{}
 		return rewritePolygon(val)
 	case schema.MultiPolygon:
 		return rewriteMultiPolygon(val)
+	case schema.LineString:
+		return rewriteLineString(val)
+	case schema.MultiLineString:
+		return rewriteMultiLineString(val)
+	case schema.MultiPoint:
+		return rewriteMultiPoint(val)
 	}
 	return nil
 }
@@ -2134,6 +2140,42 @@ func rewriteMultiPolygon(val map[string]interface{}) []interface{} {
 	res := make([]interface{}, 0, len(polygons))
 	for _, polygon := range polygons {
 		res = append(res, rewritePolygon(polygon.(map[string]interface{})))
+	}
+	return res
+}
+
+// rewriteLineString constructs coordinates for LineString type.
+// For LineString type, the mutation json is as follows:
+// { "type": "LineString", "coordinates": [[lng1,lat1],[lng2,lat2],...] }
+func rewriteLineString(val map[string]interface{}) []interface{} {
+	coords := val[schema.Coordinates].([]interface{})
+	res := make([]interface{}, 0, len(coords))
+	for _, coord := range coords {
+		res = append(res, coord.([]interface{}))
+	}
+	return res
+}
+
+// rewriteMultiLineString constructs coordinates for MultiLineString type.
+// For MultiLineString type, the mutation json is as follows:
+// { "type": "MultiLineString", "coordinates": [[[lng1,lat1],[lng2,lat2],...], ...] }
+func rewriteMultiLineString(val map[string]interface{}) []interface{} {
+	lines := val[schema.Lines].([]interface{})
+	res := make([]interface{}, 0, len(lines))
+	for _, line := range lines {
+		res = append(res, rewriteLineString(line.(map[string]interface{})))
+	}
+	return res
+}
+
+// rewriteMultiPoint constructs coordinates for MultiPoint type.
+// For MultiPoint type, the mutation json is as follows:
+// { "type": "MultiPoint", "coordinates": [[lng1,lat1],[lng2,lat2],...] }
+func rewriteMultiPoint(val map[string]interface{}) []interface{} {
+	points := val[schema.Points].([]interface{})
+	res := make([]interface{}, 0, len(points))
+	for _, pt := range points {
+		res = append(res, pt.([]interface{}))
 	}
 	return res
 }

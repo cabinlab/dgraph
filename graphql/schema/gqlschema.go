@@ -78,14 +78,18 @@ const (
 	SINGLE      = "SINGLE"
 
 	// geo type names and fields
-	Point        = "Point"
-	Polygon      = "Polygon"
-	MultiPolygon = "MultiPolygon"
-	Latitude     = "latitude"
-	Longitude    = "longitude"
-	Points       = "points"
-	Coordinates  = "coordinates"
-	Polygons     = "polygons"
+	Point           = "Point"
+	Polygon         = "Polygon"
+	MultiPolygon    = "MultiPolygon"
+	LineString      = "LineString"
+	MultiLineString = "MultiLineString"
+	MultiPoint      = "MultiPoint"
+	Latitude        = "latitude"
+	Longitude       = "longitude"
+	Points          = "points"
+	Coordinates     = "coordinates"
+	Polygons        = "polygons"
+	Lines           = "lines"
 
 	deprecatedDirective = "deprecated"
 	NumUid              = "numUids"
@@ -235,6 +239,30 @@ input MultiPolygonRef {
 	polygons: [PolygonRef!]!
 }
 
+type LineString {
+	coordinates: [[Float!]!]!
+}
+
+input LineStringRef {
+	coordinates: [[Float!]!]!
+}
+
+type MultiLineString {
+	lines: [LineString!]!
+}
+
+input MultiLineStringRef {
+	lines: [LineStringRef!]!
+}
+
+type MultiPoint {
+	points: [[Float!]!]!
+}
+
+input MultiPointRef {
+	points: [[Float!]!]!
+}
+
 input WithinFilter {
 	polygon: PolygonRef!
 }
@@ -242,11 +270,18 @@ input WithinFilter {
 input ContainsFilter {
 	point: PointRef
 	polygon: PolygonRef
+	multiPolygon: MultiPolygonRef
+	lineString: LineStringRef
+	multiLineString: MultiLineStringRef
+	multiPoint: MultiPointRef
 }
 
 input IntersectsFilter {
 	polygon: PolygonRef
 	multiPolygon: MultiPolygonRef
+	lineString: LineStringRef
+	multiLineString: MultiLineStringRef
+	multiPoint: MultiPointRef
 }
 
 input PolygonGeoFilter {
@@ -445,39 +480,45 @@ var numUids = &ast.FieldDefinition{
 // search arg -> supported GraphQL type
 // == supported Dgraph index -> GraphQL type it applies to
 var supportedSearches = map[string]searchTypeIndex{
-	"int":          {"Int", "int"},
-	"int64":        {"Int64", "int"},
-	"float":        {"Float", "float"},
-	"bool":         {"Boolean", "bool"},
-	"hash":         {"String", "hash"},
-	"exact":        {"String", "exact"},
-	"term":         {"String", "term"},
-	"fulltext":     {"String", "fulltext"},
-	"trigram":      {"String", "trigram"},
-	"regexp":       {"String", "trigram"},
-	"ngram":        {"String", "ngram"},
-	"year":         {"DateTime", "year"},
-	"month":        {"DateTime", "month"},
-	"day":          {"DateTime", "day"},
-	"hour":         {"DateTime", "hour"},
-	"point":        {"Point", "geo"},
-	"polygon":      {"Polygon", "geo"},
-	"multiPolygon": {"MultiPolygon", "geo"},
-	"hnsw":         {"Float", "hnsw"},
+	"int":             {"Int", "int"},
+	"int64":           {"Int64", "int"},
+	"float":           {"Float", "float"},
+	"bool":            {"Boolean", "bool"},
+	"hash":            {"String", "hash"},
+	"exact":           {"String", "exact"},
+	"term":            {"String", "term"},
+	"fulltext":        {"String", "fulltext"},
+	"trigram":         {"String", "trigram"},
+	"regexp":          {"String", "trigram"},
+	"ngram":           {"String", "ngram"},
+	"year":            {"DateTime", "year"},
+	"month":           {"DateTime", "month"},
+	"day":             {"DateTime", "day"},
+	"hour":            {"DateTime", "hour"},
+	"point":           {"Point", "geo"},
+	"polygon":         {"Polygon", "geo"},
+	"multiPolygon":    {"MultiPolygon", "geo"},
+	"lineString":      {"LineString", "geo"},
+	"multiLineString": {"MultiLineString", "geo"},
+	"multiPoint":      {"MultiPoint", "geo"},
+	"hnsw":            {"Float", "hnsw"},
 }
 
 // GraphQL scalar/object type -> default search arg
 // used if the schema specifies @search without an arg
 var defaultSearches = map[string]string{
-	"Boolean":      "bool",
-	"Int":          "int",
-	"Int64":        "int64",
-	"Float":        "float",
-	"String":       "term",
-	"DateTime":     "year",
-	"Point":        "point",
-	"Polygon":      "polygon",
-	"MultiPolygon": "multiPolygon",
+	"Boolean":         "bool",
+	"Int":             "int",
+	"Int64":           "int64",
+	"Float":           "float",
+	"String":          "term",
+	"DateTime":        "year",
+	"Point":           "point",
+	"Polygon":         "polygon",
+	"MultiPolygon":    "multiPolygon",
+	"LineString":      "lineString",
+	"MultiLineString": "multiLineString",
+	"MultiPoint":      "multiPoint",
 }
 
 // graphqlSpecScalars holds all the scalar types supported by the graphql spec.
@@ -522,40 +563,46 @@ var enumDirectives = map[string]bool{
 
 // index name -> GraphQL input filter for that index
 var builtInFilters = map[string]string{
-	"bool":         "Boolean",
-	"int":          "IntFilter",
-	"int64":        "Int64Filter",
-	"float":        "FloatFilter",
-	"year":         "DateTimeFilter",
-	"month":        "DateTimeFilter",
-	"day":          "DateTimeFilter",
-	"hour":         "DateTimeFilter",
-	"term":         "StringTermFilter",
-	"trigram":      "StringRegExpFilter",
-	"regexp":       "StringRegExpFilter",
-	"ngram":        "StringNgramFilter",
-	"fulltext":     "StringFullTextFilter",
-	"exact":        "StringExactFilter",
-	"hash":         "StringHashFilter",
-	"point":        "PointGeoFilter",
-	"polygon":      "PolygonGeoFilter",
-	"multiPolygon": "PolygonGeoFilter",
-	"hnsw":         "HNSWSearchFilter",
+	"bool":            "Boolean",
+	"int":             "IntFilter",
+	"int64":           "Int64Filter",
+	"float":           "FloatFilter",
+	"year":            "DateTimeFilter",
+	"month":           "DateTimeFilter",
+	"day":             "DateTimeFilter",
+	"hour":            "DateTimeFilter",
+	"term":            "StringTermFilter",
+	"trigram":         "StringRegExpFilter",
+	"regexp":          "StringRegExpFilter",
+	"ngram":           "StringNgramFilter",
+	"fulltext":        "StringFullTextFilter",
+	"exact":           "StringExactFilter",
+	"hash":            "StringHashFilter",
+	"point":           "PointGeoFilter",
+	"polygon":         "PolygonGeoFilter",
+	"multiPolygon":    "PolygonGeoFilter",
+	"lineString":      "PolygonGeoFilter",
+	"multiLineString": "PolygonGeoFilter",
+	"multiPoint":      "PolygonGeoFilter",
+	"hnsw":            "HNSWSearchFilter",
 }
 
 // GraphQL in-built type -> Dgraph scalar
 var inbuiltTypeToDgraph = map[string]string{
-	"ID":           "uid",
-	"Boolean":      "bool",
-	"Int":          "int",
-	"Int64":        "int",
-	"Float":        "float",
-	"String":       "string",
-	"DateTime":     "dateTime",
-	"Password":     "password",
-	"Point":        "geo",
-	"Polygon":      "geo",
-	"MultiPolygon": "geo",
+	"ID":              "uid",
+	"Boolean":         "bool",
+	"Int":             "int",
+	"Int64":           "int",
+	"Float":           "float",
+	"String":          "string",
+	"DateTime":        "dateTime",
+	"Password":        "password",
+	"Point":           "geo",
+	"Polygon":         "geo",
+	"MultiPolygon":    "geo",
+	"LineString":      "geo",
+	"MultiLineString": "geo",
+	"MultiPoint":      "geo",
 }
 
 func ValidatorNoOp(

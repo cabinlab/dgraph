@@ -181,6 +181,115 @@
           }
         }
 
+- name: Add mutation geo field - LineString type
+  gqlmutation: |
+    mutation addHotel($hotel: AddHotelInput!) {
+      addHotel(input: [$hotel]) {
+        hotel {
+          name
+          route {
+            coordinates
+          }
+        }
+      }
+    }
+  gqlvariables: |
+    { "hotel":
+      { "name": "Taj Hotel",
+        "route": {
+          "coordinates": [[1.1, 2.2], [3.3, 4.4], [5.5, 6.6]]
+        }
+      }
+    }
+  explanation:
+    Add mutation should convert the LineString type mutation to corresponding Dgraph JSON mutation
+  dgmutations:
+    - setjson: |
+        {
+          "uid":"_:Hotel_1",
+          "dgraph.type":["Hotel"],
+          "Hotel.name":"Taj Hotel",
+          "Hotel.route": {
+            "type": "LineString",
+            "coordinates": [[1.1,2.2],[3.3,4.4],[5.5,6.6]]
+          }
+        }
+
+- name: Add mutation geo field - MultiLineString type
+  gqlmutation: |
+    mutation addHotel($hotel: AddHotelInput!) {
+      addHotel(input: [$hotel]) {
+        hotel {
+          name
+          routes {
+            lines {
+              coordinates
+            }
+          }
+        }
+      }
+    }
+  gqlvariables: |
+    { "hotel":
+      { "name": "Taj Hotel",
+        "routes": {
+          "lines": [{
+            "coordinates": [[1.1, 2.2], [3.3, 4.4]]
+          }, {
+            "coordinates": [[5.5, 6.6], [7.7, 8.8]]
+          }]
+        }
+      }
+    }
+  explanation:
+    Add mutation should convert the MultiLineString type mutation to corresponding Dgraph JSON
+    mutation
+  dgmutations:
+    - setjson: |
+        {
+          "uid":"_:Hotel_1",
+          "dgraph.type":["Hotel"],
+          "Hotel.name":"Taj Hotel",
+          "Hotel.routes": {
+            "type": "MultiLineString",
+            "coordinates": [[[1.1,2.2],[3.3,4.4]],[[5.5,6.6],[7.7,8.8]]]
+          }
+        }
+
+- name: Add mutation geo field - MultiPoint type
+  gqlmutation: |
+    mutation addHotel($hotel: AddHotelInput!) {
+      addHotel(input: [$hotel]) {
+        hotel {
+          name
+          landmarks {
+            points
+          }
+        }
+      }
+    }
+  gqlvariables: |
+    { "hotel":
+      { "name": "Taj Hotel",
+        "landmarks": {
+          "points": [[1.1, 2.2], [3.3, 4.4], [5.5, 6.6]]
+        }
+      }
+    }
+  explanation:
+    Add mutation should convert the MultiPoint type mutation to corresponding Dgraph JSON mutation
+  dgmutations:
+    - setjson: |
+        {
+          "uid":"_:Hotel_1",
+          "dgraph.type":["Hotel"],
+          "Hotel.name":"Taj Hotel",
+          "Hotel.landmarks": {
+            "type": "MultiPoint",
+            "coordinates": [[1.1,2.2],[3.3,4.4],[5.5,6.6]]
+          }
+        }
+
 - name: Add mutation with variables
   gqlmutation: |
     mutation addAuthor($auth: AddAuthorInput!) {

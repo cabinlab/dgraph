@@ -230,6 +230,118 @@
         }
       cond: "@if(gt(len(x), 0))"
 
+- name: Update set mutation on Geo - LineString type
+  gqlmutation: |
+    mutation updateHotel($patch: UpdateHotelInput!) {
+      updateHotel(input: $patch) {
+        numUids
+      }
+    }
+  gqlvariables: |
+    { "patch":
+      { "filter": {
+          "id": ["0x123", "0x124"]
+        },
+        "set": {
+          "route": {
+            "coordinates": [[1.1, 2.2], [3.3, 4.4], [5.5, 6.6]]
+          }
+        }
+      }
+    }
+  explanation: The update patch should get rewritten into the Dgraph set mutation
+  dgquerysec: |-
+    query {
+      x as updateHotel(func: uid(0x123, 0x124)) @filter(type(Hotel)) {
+        uid
+      }
+    }
+  dgmutations:
+    - setjson: |
+        { "uid" : "uid(x)",
+          "Hotel.route": {
+            "type": "LineString",
+            "coordinates": [[1.1,2.2],[3.3,4.4],[5.5,6.6]]
+          }
+        }
+      cond: "@if(gt(len(x), 0))"
+
+- name: Update set mutation on Geo - MultiLineString type
+  gqlmutation: |
+    mutation updateHotel($patch: UpdateHotelInput!) {
+      updateHotel(input: $patch) {
+        numUids
+      }
+    }
+  gqlvariables: |
+    { "patch":
+      { "filter": {
+          "id": ["0x123", "0x124"]
+        },
+        "set": {
+          "routes": {
+            "lines": [{
+              "coordinates": [[1.1, 2.2], [3.3, 4.4]]
+            }, {
+              "coordinates": [[5.5, 6.6], [7.7, 8.8]]
+            }]
+          }
+        }
+      }
+    }
+  explanation: The update patch should get rewritten into the Dgraph set mutation
+  dgquerysec: |-
+    query {
+      x as updateHotel(func: uid(0x123, 0x124)) @filter(type(Hotel)) {
+        uid
+      }
+    }
+  dgmutations:
+    - setjson: |
+        { "uid" : "uid(x)",
+          "Hotel.routes": {
+            "type": "MultiLineString",
+            "coordinates": [[[1.1,2.2],[3.3,4.4]],[[5.5,6.6],[7.7,8.8]]]
+          }
+        }
+      cond: "@if(gt(len(x), 0))"
+
+- name: Update set mutation on Geo - MultiPoint type
+  gqlmutation: |
+    mutation updateHotel($patch: UpdateHotelInput!) {
+      updateHotel(input: $patch) {
+        numUids
+      }
+    }
+  gqlvariables: |
+    { "patch":
+      { "filter": {
+          "id": ["0x123", "0x124"]
+        },
+        "set": {
+          "landmarks": {
+            "points": [[1.1, 2.2], [3.3, 4.4], [5.5, 6.6]]
+          }
+        }
+      }
+    }
+  explanation: The update patch should get rewritten into the Dgraph set mutation
+  dgquerysec: |-
+    query {
+      x as updateHotel(func: uid(0x123, 0x124)) @filter(type(Hotel)) {
+        uid
+      }
+    }
+  dgmutations:
+    - setjson: |
+        { "uid" : "uid(x)",
+          "Hotel.landmarks": {
+            "type": "MultiPoint",
+            "coordinates": [[1.1,2.2],[3.3,4.4],[5.5,6.6]]
+          }
+        }
+      cond: "@if(gt(len(x), 0))"
+
 - name: Update set mutation with variables
   gqlmutation: |
     mutation updatePost($patch: UpdatePostInput!) {

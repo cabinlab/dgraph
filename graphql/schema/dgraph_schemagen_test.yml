@@ -739,6 +739,15 @@ schemas:
         branches1: MultiPolygon @search
         branches2: MultiPolygon
         branches3: MultiPolygon @search(by: [multiPolygon])
+        route1: LineString @search
+        route2: LineString
+        route3: LineString @search(by: [lineString])
+        routes1: MultiLineString @search
+        routes2: MultiLineString
+        routes3: MultiLineString @search(by: [multiLineString])
+        landmarks1: MultiPoint @search
+        landmarks2: MultiPoint
+        landmarks3: MultiPoint @search(by: [multiPoint])
       }
     output: |
       type Hotel {
@@ -752,6 +761,15 @@ schemas:
         Hotel.branches1
         Hotel.branches2
         Hotel.branches3
+        Hotel.route1
+        Hotel.route2
+        Hotel.route3
+        Hotel.routes1
+        Hotel.routes2
+        Hotel.routes3
+        Hotel.landmarks1
+        Hotel.landmarks2
+        Hotel.landmarks3
       }
       Hotel.name: string .
       Hotel.location: geo @index(geo) .
@@ -763,6 +781,15 @@ schemas:
       Hotel.branches1: geo @index(geo) .
       Hotel.branches2: geo .
       Hotel.branches3: geo @index(geo) .
+      Hotel.route1: geo @index(geo) .
+      Hotel.route2: geo .
+      Hotel.route3: geo @index(geo) .
+      Hotel.routes1: geo @index(geo) .
+      Hotel.routes2: geo .
+      Hotel.routes3: geo @index(geo) .
+      Hotel.landmarks1: geo @index(geo) .
+      Hotel.landmarks2: geo .
+      Hotel.landmarks3: geo @index(geo) .
 
   - name: Int field with @id Directive
     input: |
