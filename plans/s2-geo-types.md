@@ -1,33 +1,22 @@
 # Plan: Add LineString, MultiLineString, and MultiPoint to Dgraph Geo (S2) Support
 
-## Implementation Status (updated 2026-03-02 session 2)
+## Implementation Status (updated 2026-03-02 session 3 — COMPLETE)
 
 **Branch:** `feat/s2-geo-new-types`
 
-### Completed
+### All items complete
+
 - [x] **Types layer** (commit `c802ac9fa`): s2.go, s2index.go, geofilter.go — parsing, indexing, filtering + 31 new unit tests (82 total pass)
 - [x] **GraphQL layer** (commit `b837317eb`): gqlschema.go, rules.go, wrappers.go, mutation_rewriter.go, query_rewriter.go + 12 new test cases, 53 golden files regenerated
-- [x] **DQL parser tests** (commit `2d29646db`): 4 parser lock-in tests (all pass), 12 query integration tests (compile, need cluster)
+- [x] **DQL parser tests** (commit `2d29646db`): 4 parser lock-in tests (all pass), 12 query integration tests
 - [x] **Assertion fix** (commit `16fb8f23`): Fixed `isWithin()`/`contains()` AssertTruef guards that panicked when new query fields (polylines/pts) were set without loops
 - [x] **Dockerfile** (commit `16fb8f23`): Bumped Go 1.25.0→1.25.7, unpinned apt versions
-- [x] **GraphQL response completion** (uncommitted): Added `completeLineString`, `completeMultiLineString`, `completeMultiPoint`, and `writeCoordinateArray` to `query/outputnode_graphql.go`. The switch in `completeGeoObject` was missing cases for the 3 new types — they would have returned `"unsupported geo type"` at runtime. Fixed + compiles clean.
-- [x] **Docker image rebuilt**: `dgraph/dgraph:local` rebuilt with all fixes. Image includes commit `c08341d03` (branch HEAD).
-- [x] **Alpha restarted**: Container running on `dgraph-org_default` network, healthy (`/health` returns status=healthy, version=`v25.2.0-30-gc08341d03`). Assertion crash is resolved.
-- [x] **Docs pass**: Audited all Go files for stale geo type lists. All comments in `wrappers.go`, `rules.go`, `mutation_rewriter.go`, `outputnode_graphql.go` already include the 6 types. No stale lists found.
-
-### Remaining (next session)
-1. **Commit** the `outputnode_graphql.go` fix (staged, not yet committed)
-2. **Run query integration tests** against live cluster: `go test ./query/... -run Geo -v -count=1`
-3. **Debug any runtime failures** from the integration tests
-4. **End-to-end manual validation** — insert data via DQL/GraphQL, run all 4 geo functions, verify response shapes
-5. **Final commit + plan update**
-
-### Cluster State
-- Zero: running (`dgraph-zero`)
-- Alpha: running (`dgraph-alpha`), healthy, image `dgraph/dgraph:local` (rebuilt this session)
-- Ratel: running (`dgraph-ratel`)
-- Network: `dgraph-org_default`, alpha alias `alpha`
-- Alpha data volume: `dgraph-org_dgraph-alpha-data` (may contain data from previous test runs)
+- [x] **GraphQL response completion** (commit `5ec3effa0`): Added `completeLineString`, `completeMultiLineString`, `completeMultiPoint`, and `writeCoordinateArray` to `query/outputnode_graphql.go`
+- [x] **Pre-existing test fix** (commit `b1ebde9c8`): Updated `TestGeoFuncWithAfter` expected results to include new geo entities that now appear in near() results
+- [x] **Docs pass**: All Go file comments already include the 6 types. No stale lists found.
+- [x] **Integration tests**: All 13 Geo tests pass against live cluster (`go test ./query/... -tags=integration -run Geo -v -count=1`)
+- [x] **End-to-end DQL validation**: All 4 geo functions (near, within, contains, intersects) verified with all 6 stored types + LineString/MultiLineString/MultiPoint as query arguments
+- [x] **End-to-end GraphQL validation**: GraphQL mutations (addPlace) and queries (queryPlace with near/within/intersects filters) verified for all 3 new geo types with correct response shapes
 
 ### Known Issue (RESOLVED)
 The `dgraph-alpha` container previously crashed with:
