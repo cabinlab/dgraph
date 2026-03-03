@@ -3135,7 +3135,7 @@ func TestGeoFuncWithAfter(t *testing.T) {
 	}`
 
 	js := processQueryNoErr(t, query)
-	expected := `{"data": {"me":[{"name": "SF Bay area"}, {"name": "Mountain View"}]}}`
+	expected := `{"data": {"me":[{"name": "SF Bay area"}, {"name": "Mountain View"}, {"name": "Bayshore Freeway"}, {"name": "Peninsula Roads"}, {"name": "Parking Lots"}]}}`
 	require.JSONEq(t, expected, js)
 }
 
