@@ -1007,6 +1007,15 @@
         },
         {
           "name": "Hotel.branches"
+        },
+        {
+          "name": "Hotel.route"
+        },
+        {
+          "name": "Hotel.routes"
+        },
+        {
+          "name": "Hotel.landmarks"
         }
       ],
       "name": "Hotel"
