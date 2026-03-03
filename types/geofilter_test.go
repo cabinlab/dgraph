@@ -419,36 +419,7 @@ func TestMatchesFilterNearPoint(t *testing.T) {
 }
 
 // --- LineString/MultiLineString/MultiPoint filter tests ---
-
-func formDataLineString(t *testing.T, ls *geom.LineString) string {
-	d, err := wkb.Marshal(ls, binary.LittleEndian)
-	require.NoError(t, err)
-	src := ValueForType(GeoID)
-	src.Value = d
-	gd, err := Convert(src, StringID)
-	require.NoError(t, err)
-	return gd.Value.(string)
-}
-
-func formDataMultiLineString(t *testing.T, mls *geom.MultiLineString) string {
-	d, err := wkb.Marshal(mls, binary.LittleEndian)
-	require.NoError(t, err)
-	src := ValueForType(GeoID)
-	src.Value = d
-	gd, err := Convert(src, StringID)
-	require.NoError(t, err)
-	return gd.Value.(string)
-}
-
-func formDataMultiPoint(t *testing.T, mp *geom.MultiPoint) string {
-	d, err := wkb.Marshal(mp, binary.LittleEndian)
-	require.NoError(t, err)
-	src := ValueForType(GeoID)
-	src.Value = d
-	gd, err := Convert(src, StringID)
-	require.NoError(t, err)
-	return gd.Value.(string)
-}
+// Note: formDataPolygon accepts geom.T, so it works for all geo types.
 
 func TestMatchesFilterWithinLineString(t *testing.T) {
 	// Query: within a polygon containing the SF Bay Area
@@ -664,7 +635,7 @@ func TestQueryTokensLineStringContains(t *testing.T) {
 	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
 		{-122.0, 37.0}, {-122.5, 37.5},
 	})
-	data := formDataLineString(t, ls)
+	data := formDataPolygon(t, ls)
 	toks, qd, err := queryTokens(QueryTypeContains, data, 0.0)
 	require.NoError(t, err)
 	require.NotEmpty(t, toks)
@@ -676,7 +647,7 @@ func TestQueryTokensLineStringIntersects(t *testing.T) {
 	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
 		{-122.0, 37.0}, {-122.5, 37.5},
 	})
-	data := formDataLineString(t, ls)
+	data := formDataPolygon(t, ls)
 	toks, qd, err := queryTokens(QueryTypeIntersects, data, 0.0)
 	require.NoError(t, err)
 	require.NotEmpty(t, toks)
@@ -688,7 +659,7 @@ func TestQueryTokensLineStringWithinError(t *testing.T) {
 	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
 		{-122.0, 37.0}, {-122.5, 37.5},
 	})
-	data := formDataLineString(t, ls)
+	data := formDataPolygon(t, ls)
 	_, _, err := queryTokens(QueryTypeWithin, data, 0.0)
 	require.Error(t, err)
 }
@@ -697,7 +668,7 @@ func TestQueryTokensLineStringNearError(t *testing.T) {
 	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
 		{-122.0, 37.0}, {-122.5, 37.5},
 	})
-	data := formDataLineString(t, ls)
+	data := formDataPolygon(t, ls)
 	_, _, err := queryTokens(QueryTypeNear, data, 1000.0)
 	require.Error(t, err)
 }
@@ -706,7 +677,7 @@ func TestQueryTokensMultiPointContains(t *testing.T) {
 	mp := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
 		{-122.0, 37.0}, {-122.5, 37.5},
 	})
-	data := formDataMultiPoint(t, mp)
+	data := formDataPolygon(t, mp)
 	toks, qd, err := queryTokens(QueryTypeContains, data, 0.0)
 	require.NoError(t, err)
 	require.NotEmpty(t, toks)
@@ -719,7 +690,7 @@ func TestIntersectsLineStringWithLineStringQuery(t *testing.T) {
 	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
 		{-122.5, 37.0}, {-122.5, 38.0},
 	})
-	data := formDataLineString(t, ls)
+	data := formDataPolygon(t, ls)
 	_, qd, err := queryTokens(QueryTypeIntersects, data, 0.0)
 	require.NoError(t, err)
 
@@ -741,7 +712,7 @@ func TestIntersectsMultiPointWithLineStringQuery(t *testing.T) {
 	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
 		{-122.0, 37.0}, {-122.0, 38.0},
 	})
-	data := formDataLineString(t, ls)
+	data := formDataPolygon(t, ls)
 	_, qd, err := queryTokens(QueryTypeIntersects, data, 0.0)
 	require.NoError(t, err)
 

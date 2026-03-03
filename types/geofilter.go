@@ -492,137 +492,117 @@ func (q GeoQueryData) intersects(g geom.T) bool {
 		"Loop, polyline, or points should be defined for intersects.")
 	switch v := g.(type) {
 	case *geom.Point:
-		p := pointFromPoint(v)
-		for _, l := range q.loops {
-			if l.ContainsPoint(p) {
-				return true
-			}
-		}
-		for _, pl := range q.polylines {
-			if pointOnPolyline(p, pl) {
-				return true
-			}
-		}
-		for _, qpt := range q.pts {
-			if p.ApproxEqual(qpt) {
-				return true
-			}
-		}
-		return false
+		return q.pointIntersectsQuery(pointFromPoint(v))
 
 	case *geom.Polygon:
 		l, err := loopFromPolygon(v)
 		if err != nil {
 			return false
 		}
-		for _, loop := range q.loops {
-			if Intersects(l, loop) {
-				return true
-			}
-		}
-		for _, pl := range q.polylines {
-			if polylineIntersectsLoop(pl, l) {
-				return true
-			}
-		}
-		for _, qpt := range q.pts {
-			if l.ContainsPoint(qpt) {
-				return true
-			}
-		}
-		return false
+		return q.loopIntersectsQuery(l)
+
 	case *geom.MultiPolygon:
-		// We must compare all polygons in g with those in the query.
 		for i := range v.NumPolygons() {
 			l, err := loopFromPolygon(v.Polygon(i))
 			if err != nil {
 				return false
 			}
-			for _, loop := range q.loops {
-				if Intersects(l, loop) {
-					return true
-				}
-			}
-			for _, pl := range q.polylines {
-				if polylineIntersectsLoop(pl, l) {
-					return true
-				}
-			}
-			for _, qpt := range q.pts {
-				if l.ContainsPoint(qpt) {
-					return true
-				}
+			if q.loopIntersectsQuery(l) {
+				return true
 			}
 		}
 		return false
+
 	case *geom.LineString:
 		pl, err := polylineFromLineString(v)
 		if err != nil {
 			return false
 		}
-		for _, loop := range q.loops {
-			if polylineIntersectsLoop(pl, loop) {
-				return true
-			}
-		}
-		for _, qpl := range q.polylines {
-			if polylinesIntersect(pl, qpl) {
-				return true
-			}
-		}
-		for _, qpt := range q.pts {
-			if pointOnPolyline(qpt, pl) {
-				return true
-			}
-		}
-		return false
+		return q.polylineIntersectsQuery(pl)
+
 	case *geom.MultiLineString:
 		for i := 0; i < v.NumLineStrings(); i++ {
 			pl, err := polylineFromLineString(v.LineString(i))
 			if err != nil {
 				return false
 			}
-			for _, loop := range q.loops {
-				if polylineIntersectsLoop(pl, loop) {
-					return true
-				}
-			}
-			for _, qpl := range q.polylines {
-				if polylinesIntersect(pl, qpl) {
-					return true
-				}
-			}
-			for _, qpt := range q.pts {
-				if pointOnPolyline(qpt, pl) {
-					return true
-				}
+			if q.polylineIntersectsQuery(pl) {
+				return true
 			}
 		}
 		return false
+
 	case *geom.MultiPoint:
 		for i := 0; i < v.NumPoints(); i++ {
-			p := pointFromPoint(v.Point(i))
-			for _, loop := range q.loops {
-				if loop.ContainsPoint(p) {
-					return true
-				}
-			}
-			for _, pl := range q.polylines {
-				if pointOnPolyline(p, pl) {
-					return true
-				}
-			}
-			for _, qpt := range q.pts {
-				if p.ApproxEqual(qpt) {
-					return true
-				}
+			if q.pointIntersectsQuery(pointFromPoint(v.Point(i))) {
+				return true
 			}
 		}
 		return false
+
 	default:
-		// A type that we don't know how to handle.
 		return false
 	}
+}
+
+// pointIntersectsQuery returns true if a point intersects any query geometry.
+func (q GeoQueryData) pointIntersectsQuery(p s2.Point) bool {
+	for _, l := range q.loops {
+		if l.ContainsPoint(p) {
+			return true
+		}
+	}
+	for _, pl := range q.polylines {
+		if pointOnPolyline(p, pl) {
+			return true
+		}
+	}
+	for _, qpt := range q.pts {
+		if p.ApproxEqual(qpt) {
+			return true
+		}
+	}
+	return false
+}
+
+// loopIntersectsQuery returns true if a loop intersects any query geometry.
+func (q GeoQueryData) loopIntersectsQuery(l *s2.Loop) bool {
+	for _, loop := range q.loops {
+		if Intersects(l, loop) {
+			return true
+		}
+	}
+	for _, pl := range q.polylines {
+		if polylineIntersectsLoop(pl, l) {
+			return true
+		}
+	}
+	for _, qpt := range q.pts {
+		if l.ContainsPoint(qpt) {
+			return true
+		}
+	}
+	return false
+}
+
+// polylineIntersectsQuery returns true if a polyline intersects any query geometry.
+func (q GeoQueryData) polylineIntersectsQuery(pl *s2.Polyline) bool {
+	for _, loop := range q.loops {
+		if polylineIntersectsLoop(pl, loop) {
+			return true
+		}
+	}
+	for _, qpl := range q.polylines {
+		if polylinesIntersect(pl, qpl) {
+			return true
+		}
+	}
+	for _, qpt := range q.pts {
+		if pointOnPolyline(qpt, pl) {
+			return true
+		}
+	}
+	return false
 }
 
 const lineContainsPointEpsilon = s1.Angle(1e-9)
