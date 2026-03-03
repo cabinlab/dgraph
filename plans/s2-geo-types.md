@@ -1,5 +1,33 @@
 # Plan: Add LineString, MultiLineString, and MultiPoint to Dgraph Geo (S2) Support
 
+## Implementation Status (updated 2026-03-03)
+
+**Branch:** `feat/s2-geo-new-types`
+
+### Completed
+- [x] **Types layer** (commit `c802ac9fa`): s2.go, s2index.go, geofilter.go — parsing, indexing, filtering + 31 new unit tests (82 total pass)
+- [x] **GraphQL layer** (commit `b837317eb`): gqlschema.go, rules.go, wrappers.go, mutation_rewriter.go, query_rewriter.go + 12 new test cases, 53 golden files regenerated
+- [x] **DQL parser tests** (commit `2d29646db`): 4 parser lock-in tests (all pass), 12 query integration tests (compile, need cluster)
+- [x] **Assertion fix** (commit `16fb8f23`): Fixed `isWithin()`/`contains()` AssertTruef guards that panicked when new query fields (polylines/pts) were set without loops
+- [x] **Dockerfile** (commit `16fb8f23`): Bumped Go 1.25.0→1.25.7, unpinned apt versions
+
+### Remaining
+- [ ] **Rebuild `dgraph/dgraph:local` image** with the assertion fix and relaunch cluster
+- [ ] **Run query integration tests** against live cluster (`go test ./query/... -run Geo -v`)
+- [ ] **Debug any runtime failures** — the Alpha crashed on the old image due to the assertion bug (now fixed); need to verify the fix resolves it
+- [ ] **Docs pass** — update in-repo geo docs/comments where type lists are hardcoded (plan section 4)
+- [ ] **End-to-end manual validation** — insert data via DQL/GraphQL, run all 4 geo functions, verify response shapes
+
+### Known Issue Found During Testing
+The `dgraph-alpha` container crashed with:
+```
+At least a point or loop should be defined.
+types.GeoQueryData.contains (geofilter.go:386)
+```
+**Root cause:** The original `isWithin()` and `contains()` methods had `AssertTruef` guards that only checked `q.pt != nil || len(q.loops) > 0`. When new query types (polylines, pts) were used, the assertion fired. **Fix committed** in `16fb8f23` — assertions now include `q.polylines` and `q.pts`.
+
+---
+
 ## Intent
 `17e96f7` is the floor, not the ceiling. For the new geo types, we will deliver an equivalent-or-better scope in current v25 architecture: types/indexing/filtering, parser implications, integration tests, and GraphQL surface support.
 
@@ -287,50 +315,3 @@ No storage schema migration is required.
 1. We target a single coherent feature implementation, not a reduced-scope placeholder.
 2. Query-argument ambiguity is solved without breaking legacy shorthand syntax.
 3. Any algorithmic tolerance constants for point-on-line checks will be fixed and documented in tests.
-
----
-
-## Implementation Progress
-
-**Branch:** `feat/s2-geo-new-types`
-
-### Completed
-
-#### Types layer (commit `c802ac9fa`)
-- `types/s2.go`: `convertToGeom()` validation for new types; helper conversions (`polylineFromLineString`, `polylinesFromMultiLineString`, `pointsFromMultiPoint`)
-- `types/s2index.go`: `coverPolyline` helper; `indexCells()` extended for `*geom.LineString`, `*geom.MultiLineString`, `*geom.MultiPoint`
-- `types/geofilter.go`: `GeoQueryData` extended with `pts`/`polylines` fields; `queryTokensGeo()` handles new query arg types; `isWithin`/`contains`/`intersects` extended; helpers: `pointOnPolyline`, `polylineWithinLoop(s)`, `polylineIntersectsLoop`, `polylinesIntersect`
-- `types/s2_test.go`, `types/s2index_test.go`, `types/geofilter_test.go`: 31 new unit tests, all pass
-
-#### DQL/query tests (commit `2d29646db`)
-- `dql/parser_test.go`: 4 parser lock-in tests (GeoJSON object form + bracket shorthand regression) — all pass
-- `query/common_test.go`: 3 fixture helpers (`addGeoLineStringToCluster`, `addGeoMultiLineStringToCluster`, `addGeoMultiPointToCluster`); seed data UIDs 5110-5114
-- `query/query2_test.go`: 12 integration tests (near/within/contains/intersects for new types) — compile clean, need cluster to run
-
-#### GraphQL layer (commit `b837317eb`)
-- `graphql/schema/gqlschema.go`: Constants, built-in type/input defs, ContainsFilter/IntersectsFilter updated, search/index maps wired
-- `graphql/schema/rules.go`: `isGeoType()` extended
-- `graphql/schema/wrappers.go`: `isInputTypeGeo()`/`IsGeo()` extended
-- `graphql/resolve/mutation_rewriter.go`: `rewriteLineString`, `rewriteMultiLineString`, `rewriteMultiPoint`; `rewriteGeoObject()` switch extended
-- `graphql/resolve/query_rewriter.go`: `buildLineString`, `buildMultiLineString`, `buildMultiPoint` (GeoJSON object form); contains/intersects filter builders extended
-- Test fixtures: `schema.graphql`, add/update/query YAML files, schemagen golden files — all pass
-- 53 golden output files regenerated
-
-#### Assertion fix (commit `16fb8f233`)
-- `types/geofilter.go`: `isWithin()` and `contains()` assertions updated to accept `q.polylines`/`q.pts` (was panicking when new query types were used)
-- `Dockerfile`: Go 1.25.0 → 1.25.7, unpinned apt versions
-
-### Unit test status (all pass)
-- `go test ./types/...` — PASS
-- `go test ./dql/... -run TestParseGeo` — PASS (4/4)
-- `go test ./graphql/schema/...` — PASS
-- `go test ./graphql/resolve/... -run "TestQueryRewriting|TestMutationRewriting|TestUpdateMutationRewriting"` — PASS
-
-### Remaining
-
-1. **Rebuild `dgraph/dgraph:local` image** with current branch code (Alpha was crashing on old image due to the assertion bug, now fixed in `16fb8f233`)
-2. **Restart local cluster** (`docker compose down && docker compose up -d` or equivalent)
-3. **Run query integration tests** against live cluster: `go test ./query/... -run Geo -tags integration`
-4. **Debug any integration test failures** — the 12 tests in `query/query2_test.go` have not yet been validated against a running cluster
-5. **Docs pass** — update in-repo geo docs/comments where type lists are hardcoded (plan step 4)
-6. **Full quality gate** — `trunk check` or equivalent lint/format pass
