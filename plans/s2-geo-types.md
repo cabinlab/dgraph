@@ -1,6 +1,6 @@
 # Plan: Add LineString, MultiLineString, and MultiPoint to Dgraph Geo (S2) Support
 
-## Implementation Status (updated 2026-03-03)
+## Implementation Status (updated 2026-03-02 session 2)
 
 **Branch:** `feat/s2-geo-new-types`
 
@@ -10,21 +10,35 @@
 - [x] **DQL parser tests** (commit `2d29646db`): 4 parser lock-in tests (all pass), 12 query integration tests (compile, need cluster)
 - [x] **Assertion fix** (commit `16fb8f23`): Fixed `isWithin()`/`contains()` AssertTruef guards that panicked when new query fields (polylines/pts) were set without loops
 - [x] **Dockerfile** (commit `16fb8f23`): Bumped Go 1.25.0→1.25.7, unpinned apt versions
+- [x] **GraphQL response completion** (uncommitted): Added `completeLineString`, `completeMultiLineString`, `completeMultiPoint`, and `writeCoordinateArray` to `query/outputnode_graphql.go`. The switch in `completeGeoObject` was missing cases for the 3 new types — they would have returned `"unsupported geo type"` at runtime. Fixed + compiles clean.
+- [x] **Docker image rebuilt**: `dgraph/dgraph:local` rebuilt with all fixes. Image includes commit `c08341d03` (branch HEAD).
+- [x] **Alpha restarted**: Container running on `dgraph-org_default` network, healthy (`/health` returns status=healthy, version=`v25.2.0-30-gc08341d03`). Assertion crash is resolved.
+- [x] **Docs pass**: Audited all Go files for stale geo type lists. All comments in `wrappers.go`, `rules.go`, `mutation_rewriter.go`, `outputnode_graphql.go` already include the 6 types. No stale lists found.
 
-### Remaining
-- [ ] **Rebuild `dgraph/dgraph:local` image** with the assertion fix and relaunch cluster
-- [ ] **Run query integration tests** against live cluster (`go test ./query/... -run Geo -v`)
-- [ ] **Debug any runtime failures** — the Alpha crashed on the old image due to the assertion bug (now fixed); need to verify the fix resolves it
-- [ ] **Docs pass** — update in-repo geo docs/comments where type lists are hardcoded (plan section 4)
-- [ ] **End-to-end manual validation** — insert data via DQL/GraphQL, run all 4 geo functions, verify response shapes
+### Remaining (next session)
+1. **Commit** the `outputnode_graphql.go` fix (staged, not yet committed)
+2. **Run query integration tests** against live cluster: `go test ./query/... -run Geo -v -count=1`
+3. **Debug any runtime failures** from the integration tests
+4. **End-to-end manual validation** — insert data via DQL/GraphQL, run all 4 geo functions, verify response shapes
+5. **Final commit + plan update**
 
-### Known Issue Found During Testing
-The `dgraph-alpha` container crashed with:
+### Cluster State
+- Zero: running (`dgraph-zero`)
+- Alpha: running (`dgraph-alpha`), healthy, image `dgraph/dgraph:local` (rebuilt this session)
+- Ratel: running (`dgraph-ratel`)
+- Network: `dgraph-org_default`, alpha alias `alpha`
+- Alpha data volume: `dgraph-org_dgraph-alpha-data` (may contain data from previous test runs)
+
+### Known Issue (RESOLVED)
+The `dgraph-alpha` container previously crashed with:
 ```
 At least a point or loop should be defined.
 types.GeoQueryData.contains (geofilter.go:386)
 ```
-**Root cause:** The original `isWithin()` and `contains()` methods had `AssertTruef` guards that only checked `q.pt != nil || len(q.loops) > 0`. When new query types (polylines, pts) were used, the assertion fired. **Fix committed** in `16fb8f23` — assertions now include `q.polylines` and `q.pts`.
+**Root cause:** The original `isWithin()` and `contains()` methods had `AssertTruef` guards that only checked `q.pt != nil || len(q.loops) > 0`. When new query types (polylines, pts) were used, the assertion fired. **Fix committed** in `16fb8f23` — assertions now include `q.polylines` and `q.pts`. Alpha now starts and stays healthy.
+
+### Bug Found This Session
+`query/outputnode_graphql.go:completeGeoObject` only handled Point/Polygon/MultiPolygon in its switch. LineString/MultiLineString/MultiPoint hit the `default` case returning `"unsupported geo type"`. This means GraphQL queries that return new geo types would fail at response serialization. Fixed by adding 3 new completion functions + a `writeCoordinateArray` helper. Compiles clean, builds clean.
 
 ---
 
