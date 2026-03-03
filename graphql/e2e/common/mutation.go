@@ -4568,6 +4568,161 @@ func mutationMultiPolygonType(t *testing.T) {
 	DeleteGqlType(t, "Hotel", map[string]interface{}{}, 1, nil)
 }
 
+func mutationLineStringType(t *testing.T) {
+	addHotelParams := &GraphQLParams{
+		Query: `
+        mutation addHotel($hotel: AddHotelInput!) {
+          addHotel(input: [$hotel]) {
+            hotel {
+              name
+              route {
+                __typename
+                coordinates
+              }
+            }
+          }
+        }`,
+		Variables: map[string]interface{}{"hotel": map[string]interface{}{
+			"name": "Route Hotel",
+			"route": map[string]interface{}{
+				"coordinates": []interface{}{
+					[]interface{}{1.1, 2.2},
+					[]interface{}{3.3, 4.4},
+					[]interface{}{5.5, 6.6},
+				},
+			},
+		}},
+	}
+	gqlResponse := addHotelParams.ExecuteAsPost(t, GraphqlURL)
+	RequireNoGQLErrors(t, gqlResponse)
+
+	addHotelExpected := `
+    {
+        "addHotel": {
+            "hotel": [{
+                "name": "Route Hotel",
+                "route": {
+                    "__typename": "LineString",
+                    "coordinates": [[1.1,2.2],[3.3,4.4],[5.5,6.6]]
+                }
+            }]
+        }
+    }`
+	testutil.CompareJSON(t, addHotelExpected, string(gqlResponse.Data))
+
+	// Cleanup
+	DeleteGqlType(t, "Hotel", map[string]interface{}{}, 1, nil)
+}
+
+func mutationMultiLineStringType(t *testing.T) {
+	addHotelParams := &GraphQLParams{
+		Query: `
+        mutation addHotel($hotel: AddHotelInput!) {
+          addHotel(input: [$hotel]) {
+            hotel {
+              name
+              routes {
+                __typename
+                lines {
+                  __typename
+                  coordinates
+                }
+              }
+            }
+          }
+        }`,
+		Variables: map[string]interface{}{"hotel": map[string]interface{}{
+			"name": "MultiRoute Hotel",
+			"routes": map[string]interface{}{
+				"lines": []interface{}{
+					map[string]interface{}{
+						"coordinates": []interface{}{
+							[]interface{}{1.1, 2.2},
+							[]interface{}{3.3, 4.4},
+						},
+					},
+					map[string]interface{}{
+						"coordinates": []interface{}{
+							[]interface{}{5.5, 6.6},
+							[]interface{}{7.7, 8.8},
+						},
+					},
+				},
+			},
+		}},
+	}
+	gqlResponse := addHotelParams.ExecuteAsPost(t, GraphqlURL)
+	RequireNoGQLErrors(t, gqlResponse)
+
+	addHotelExpected := `
+    {
+        "addHotel": {
+            "hotel": [{
+                "name": "MultiRoute Hotel",
+                "routes": {
+                    "__typename": "MultiLineString",
+                    "lines": [{
+                        "__typename": "LineString",
+                        "coordinates": [[1.1,2.2],[3.3,4.4]]
+                    }, {
+                        "__typename": "LineString",
+                        "coordinates": [[5.5,6.6],[7.7,8.8]]
+                    }]
+                }
+            }]
+        }
+    }`
+	testutil.CompareJSON(t, addHotelExpected, string(gqlResponse.Data))
+
+	// Cleanup
+	DeleteGqlType(t, "Hotel", map[string]interface{}{}, 1, nil)
+}
+
+func mutationMultiPointType(t *testing.T) {
+	addHotelParams := &GraphQLParams{
+		Query: `
+        mutation addHotel($hotel: AddHotelInput!) {
+          addHotel(input: [$hotel]) {
+            hotel {
+              name
+              landmarks {
+                __typename
+                points
+              }
+            }
+          }
+        }`,
+		Variables: map[string]interface{}{"hotel": map[string]interface{}{
+			"name": "Landmark Hotel",
+			"landmarks": map[string]interface{}{
+				"points": []interface{}{
+					[]interface{}{1.1, 2.2},
+					[]interface{}{3.3, 4.4},
+				},
+			},
+		}},
+	}
+	gqlResponse := addHotelParams.ExecuteAsPost(t, GraphqlURL)
+	RequireNoGQLErrors(t, gqlResponse)
+
+	addHotelExpected := `
+    {
+        "addHotel": {
+            "hotel": [{
+                "name": "Landmark Hotel",
+                "landmarks": {
+                    "__typename": "MultiPoint",
+                    "points": [[1.1,2.2],[3.3,4.4]]
+                }
+            }]
+        }
+    }`
+	testutil.CompareJSON(t, addHotelExpected, string(gqlResponse.Data))
+
+	// Cleanup
+	DeleteGqlType(t, "Hotel", map[string]interface{}{}, 1, nil)
+}
+
 func addMutationWithHasInverseOverridesCorrectly(t *testing.T) {
 	params := &GraphQLParams{
 		Query: `mutation addCountry($input: [AddCountryInput!]!) {

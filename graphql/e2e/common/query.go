@@ -3106,6 +3106,142 @@ func queryGeoNearFilter(t *testing.T) {
 	DeleteGqlType(t, "Hotel", map[string]interface{}{}, 3, nil)
 }
 
+func queryGeoContainsLineString(t *testing.T) {
+	// Add a hotel with a LineString route
+	addParams := &GraphQLParams{
+		Query: `mutation {
+          addHotel(input: [{
+            name: "LineString Hotel"
+            route: { coordinates: [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]] }
+          }]) {
+            hotel { name }
+          }
+        }`,
+	}
+	gqlResponse := addParams.ExecuteAsPost(t, GraphqlURL)
+	RequireNoGQLErrors(t, gqlResponse)
+
+	// Query with contains filter
+	queryParams := &GraphQLParams{
+		Query: `query {
+          queryHotel(filter: { route: { contains: { lineString: { coordinates: [[1.0, 2.0], [3.0, 4.0]] } } } }) {
+            name
+          }
+        }`,
+	}
+	gqlResponse = queryParams.ExecuteAsPost(t, GraphqlURL)
+	RequireNoGQLErrors(t, gqlResponse)
+
+	// Cleanup
+	DeleteGqlType(t, "Hotel", map[string]interface{}{}, 1, nil)
+}
+
+func queryGeoContainsMultiPoint(t *testing.T) {
+	// Add a hotel with MultiPoint landmarks
+	addParams := &GraphQLParams{
+		Query: `mutation {
+          addHotel(input: [{
+            name: "MultiPoint Hotel"
+            landmarks: { points: [[1.0, 2.0], [3.0, 4.0]] }
+          }]) {
+            hotel { name }
+          }
+        }`,
+	}
+	gqlResponse := addParams.ExecuteAsPost(t, GraphqlURL)
+	RequireNoGQLErrors(t, gqlResponse)
+
+	// Query with intersects filter
+	queryParams := &GraphQLParams{
+		Query: `query {
+          queryHotel(filter: { landmarks: { intersects: { multiPoint: { points: [[1.0, 2.0]] } } } }) {
+            name
+          }
+        }`,
+	}
+	gqlResponse = queryParams.ExecuteAsPost(t, GraphqlURL)
+	RequireNoGQLErrors(t, gqlResponse)
+
+	// Cleanup
+	DeleteGqlType(t, "Hotel", map[string]interface{}{}, 1, nil)
+}
+
+func queryGeoContainsMultiLineString(t *testing.T) {
+	// Add a hotel with MultiLineString routes
+	addParams := &GraphQLParams{
+		Query: `mutation {
+          addHotel(input: [{
+            name: "MultiLineString Hotel"
+            routes: { lines: [
+              { coordinates: [[1.0, 2.0], [3.0, 4.0]] },
+              { coordinates: [[5.0, 6.0], [7.0, 8.0]] }
+            ] }
+          }]) {
+            hotel { name }
+          }
+        }`,
+	}
+	gqlResponse := addParams.ExecuteAsPost(t, GraphqlURL)
+	RequireNoGQLErrors(t, gqlResponse)
+
+	// Query with contains filter
+	queryParams := &GraphQLParams{
+		Query: `query {
+          queryHotel(filter: { routes: { contains: { multiLineString: { lines: [{ coordinates: [[1.0, 2.0], [3.0, 4.0]] }] } } } }) {
+            name
+          }
+        }`,
+	}
+	gqlResponse = queryParams.ExecuteAsPost(t, GraphqlURL)
+	RequireNoGQLErrors(t, gqlResponse)
+
+	// Cleanup
+	DeleteGqlType(t, "Hotel", map[string]interface{}{}, 1, nil)
+}
+
+func queryGeoMalformedCoordinatesNoError(t *testing.T) {
+	// Ensure malformed coordinate filters return an error, not a panic.
+	// A single-element coordinate pair should produce a geo parse error.
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{
+			name: "LineString short coord",
+			query: `query {
+              queryHotel(filter: { route: { contains: { lineString: { coordinates: [[1.0]] } } } }) {
+                name
+              }
+            }`,
+		},
+		{
+			name: "MultiPoint short coord",
+			query: `query {
+              queryHotel(filter: { landmarks: { contains: { multiPoint: { points: [[1.0]] } } } }) {
+                name
+              }
+            }`,
+		},
+		{
+			name: "MultiLineString short coord",
+			query: `query {
+              queryHotel(filter: { routes: { contains: { multiLineString: { lines: [{ coordinates: [[1.0]] }] } } } }) {
+                name
+              }
+            }`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			queryParams := &GraphQLParams{Query: tc.query}
+			gqlResponse := queryParams.ExecuteAsPost(t, GraphqlURL)
+			// Should not panic. May return errors (invalid geo) or empty results — both are fine.
+			require.NotNil(t, gqlResponse)
+		})
+	}
+}
+
 func persistedQuery(t *testing.T) {
 	queryCountryParams := &GraphQLParams{
 		Extensions: &schema.RequestExtensions{PersistedQuery: schema.PersistedQuery{

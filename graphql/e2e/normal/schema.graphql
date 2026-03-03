@@ -7,6 +7,9 @@ type Hotel {
     location: Point @search
     area: Polygon @search
     branches: MultiPolygon @search
+    route: LineString @search
+    routes: MultiLineString @search
+    landmarks: MultiPoint @search
 }
 
 type Country {
