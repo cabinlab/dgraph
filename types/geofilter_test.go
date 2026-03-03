@@ -729,6 +729,125 @@ func TestIntersectsMultiPointWithLineStringQuery(t *testing.T) {
 	require.False(t, qd.MatchesFilter(mpFar))
 }
 
+// --- Stored Polygon contains LineString/MultiPoint/MultiLineString ---
+
+func TestContainsPolygonWithLineStringQuery(t *testing.T) {
+	// Query arg: LineString inside SF Bay polygon
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.5}, {-122.0, 37.8},
+	})
+	data := formDataPolygon(t, ls)
+	_, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+
+	// Stored polygon that fully contains the line
+	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123, 37}, {-121, 37}, {-121, 38}, {-123, 38}, {-123, 37}},
+	})
+	require.True(t, qd.MatchesFilter(poly))
+
+	// Stored polygon that does NOT contain the line (too small / wrong area)
+	polySmall := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-122.6, 37.4}, {-122.4, 37.4}, {-122.4, 37.55}, {-122.6, 37.55}, {-122.6, 37.4}},
+	})
+	require.False(t, qd.MatchesFilter(polySmall))
+}
+
+func TestContainsPolygonWithMultiPointQuery(t *testing.T) {
+	// Query arg: MultiPoint with two points in SF Bay area
+	mp := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-122.5, 37.5}, {-122.0, 37.8},
+	})
+	data := formDataPolygon(t, mp)
+	_, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+
+	// Stored polygon that contains both points
+	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123, 37}, {-121, 37}, {-121, 38}, {-123, 38}, {-123, 37}},
+	})
+	require.True(t, qd.MatchesFilter(poly))
+
+	// Stored polygon that contains only the first point (second is outside)
+	polyPartial := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-122.6, 37.4}, {-122.4, 37.4}, {-122.4, 37.6}, {-122.6, 37.6}, {-122.6, 37.4}},
+	})
+	require.False(t, qd.MatchesFilter(polyPartial))
+}
+
+func TestContainsPolygonWithMultiLineStringQuery(t *testing.T) {
+	// Query arg: MultiLineString with two lines in SF Bay area
+	mls := geom.NewMultiLineString(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-122.5, 37.5}, {-122.3, 37.6}},
+		{{-122.1, 37.7}, {-122.0, 37.8}},
+	})
+	data := formDataPolygon(t, mls)
+	_, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+
+	// Stored polygon that contains both lines
+	poly := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-123, 37}, {-121, 37}, {-121, 38}, {-123, 38}, {-123, 37}},
+	})
+	require.True(t, qd.MatchesFilter(poly))
+
+	// Stored polygon that contains only the first line (second is outside)
+	polyPartial := geom.NewPolygon(geom.XY).MustSetCoords([][]geom.Coord{
+		{{-122.6, 37.4}, {-122.2, 37.4}, {-122.2, 37.65}, {-122.6, 37.65}, {-122.6, 37.4}},
+	})
+	require.False(t, qd.MatchesFilter(polyPartial))
+}
+
+// --- Stored MultiPolygon contains LineString/MultiPoint ---
+
+func TestContainsMultiPolygonWithLineStringQuery(t *testing.T) {
+	// Query arg: LineString inside the US mainland
+	ls := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{-112.0, 39.5}, {-112.5, 39.8},
+	})
+	data := formDataPolygon(t, ls)
+	_, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+
+	// US MultiPolygon should contain this line
+	us, err := loadPolygon("testdata/us.json")
+	require.NoError(t, err)
+	require.True(t, qd.MatchesFilter(us))
+
+	// LineString that spans across ocean (outside any single US polygon)
+	lsOutside := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{
+		{10.0, 50.0}, {11.0, 51.0},
+	})
+	data = formDataPolygon(t, lsOutside)
+	_, qd, err = queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+	require.False(t, qd.MatchesFilter(us))
+}
+
+func TestContainsMultiPolygonWithMultiPointQuery(t *testing.T) {
+	// Query arg: MultiPoint with points in the US mainland
+	mp := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-112.0, 39.5}, {-112.5, 39.8},
+	})
+	data := formDataPolygon(t, mp)
+	_, qd, err := queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+
+	// US MultiPolygon should contain both points
+	us, err := loadPolygon("testdata/us.json")
+	require.NoError(t, err)
+	require.True(t, qd.MatchesFilter(us))
+
+	// MultiPoint with one point outside the US
+	mpPartial := geom.NewMultiPoint(geom.XY).MustSetCoords([]geom.Coord{
+		{-112.0, 39.5}, {10.0, 50.0},
+	})
+	data = formDataPolygon(t, mpPartial)
+	_, qd, err = queryTokens(QueryTypeContains, data, 0.0)
+	require.NoError(t, err)
+	require.False(t, qd.MatchesFilter(us))
+}
+
 func BenchmarkMatchesFilterContainsPoint(b *testing.B) {
 	us, _ := loadPolygon("testdata/us.json")
 	b.ResetTimer()
