@@ -152,8 +152,7 @@ After all fixes:
 |------|--------|
 | `types/geofilter.go` | Fix contains() for Polygon and MultiPolygon + add 2 small helpers |
 | `types/geofilter_test.go` | Add 5+ contains unit tests with positive and negative assertions |
-| `query/query2_test.go` | Add negative assertions to existing tests, strengthen regression test |
-| `query/common_test.go` | Add negative-control fixture entity far from SF test area |
+| `query/query2_test.go` | Add negative assertions to existing tests using UID 5107 (NY fixture), strengthen regression test |
 
 ## Files NOT modified (audit confirmed clean)
 
