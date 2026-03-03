@@ -281,7 +281,8 @@ func loopWithinMultiloops(l *s2.Loop, loops []*s2.Loop) bool {
 
 // returns true if the geometry represented by g is within the given loop
 func (q GeoQueryData) isWithin(g geom.T) bool {
-	x.AssertTruef(q.pt != nil || len(q.loops) > 0, "At least a point, loop should be defined.")
+	x.AssertTruef(q.pt != nil || len(q.loops) > 0 || len(q.polylines) > 0 || len(q.pts) > 0,
+		"At least a point, loop, polyline, or point set should be defined.")
 	switch geometry := g.(type) {
 	case *geom.Point:
 		s2pt := pointFromPoint(geometry)
@@ -383,7 +384,8 @@ func multiPolygonContainsLoop(g *geom.MultiPolygon, l *s2.Loop) bool {
 // returns true if the geometry represented by g contains the given point/polygon.
 // g is the geom.T representation of the value which is the stored in the DB.
 func (q GeoQueryData) contains(g geom.T) bool {
-	x.AssertTruef(q.pt != nil || len(q.loops) > 0, "At least a point or loop should be defined.")
+	x.AssertTruef(q.pt != nil || len(q.loops) > 0 || len(q.polylines) > 0 || len(q.pts) > 0,
+		"At least a point, loop, polyline, or point set should be defined.")
 	switch v := g.(type) {
 	case *geom.Polygon:
 		if q.pt != nil {
