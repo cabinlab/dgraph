@@ -3138,3 +3138,158 @@ func TestGeoFuncWithAfter(t *testing.T) {
 	expected := `{"data": {"me":[{"name": "SF Bay area"}, {"name": "Mountain View"}]}}`
 	require.JSONEq(t, expected, js)
 }
+
+// Tests for new geo types: LineString, MultiLineString, MultiPoint
+
+func TestGeoNearLineString(t *testing.T) {
+	// near query should find stored LineStrings whose geometry is near the query point.
+	// UID 5110 (LineString starting at -122.082, 37.424) is within 1000m of the query point.
+	query := `{
+		me(func: near(geometry, [-122.082, 37.424], 1000)) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	require.Contains(t, js, "Bayshore Freeway")
+	require.Contains(t, js, "Googleplex")
+	require.Contains(t, js, "Shoreline Amphitheater")
+}
+
+func TestGeoWithinLineString(t *testing.T) {
+	// within query: stored LineString fully inside query polygon.
+	// UID 5113 (LineString from -122.06,37.37 to -122.07,37.38) is inside
+	// the polygon matching 5105's boundary.
+	query := `{
+		me(func: within(geometry, [[[-122.06, 37.37], [-122.1, 37.36], [-122.12, 37.4], [-122.11, 37.43], [-122.04, 37.43], [-122.06, 37.37]]])) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	require.Contains(t, js, "Googleplex")
+	require.Contains(t, js, "Shoreline Amphitheater")
+	// New types: LineString and MultiPoint inside this polygon
+	require.Contains(t, js, "Campus Walk")
+	require.Contains(t, js, "Meeting Points")
+}
+
+func TestGeoContainsPointOnLineString(t *testing.T) {
+	// contains query with a point arg.
+	// Stored polygons that contain this point should match.
+	// LineStrings are 1D and generally do not "contain" a point in the geometric sense,
+	// so we only expect polygon matches here.
+	query := `{
+		me(func: contains(geometry, [-122.082506, 37.4249518])) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	require.Contains(t, js, "SF Bay area")
+	require.Contains(t, js, "Mountain View")
+}
+
+func TestGeoIntersectsLineString(t *testing.T) {
+	// intersects query with polygon arg. Stored LineString should match if it crosses
+	// or lies within the polygon.
+	// UID 5110 (LineString: -122.082...-122.086, 37.424...37.428) intersects a box
+	// around that area.
+	query := `{
+		me(func: intersects(geometry, [[[-122.081, 37.423], [-122.081, 37.429], [-122.087, 37.429], [-122.087, 37.423], [-122.081, 37.423]]])) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	require.Contains(t, js, "Bayshore Freeway")
+	require.Contains(t, js, "SF Bay area")
+	require.Contains(t, js, "Mountain View")
+}
+
+func TestGeoIntersectsWithLineStringArg(t *testing.T) {
+	// intersects query with a LineString query arg (GeoJSON object form).
+	// Should match stored polygons/points/lines that intersect this line.
+	query := `{
+		me(func: intersects(geometry, "{\"type\":\"LineString\",\"coordinates\":[[-122.06,37.37],[-122.07,37.39]]}")) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	// The query LineString passes through polygon 5105 (Mountain View)
+	require.Contains(t, js, "Mountain View")
+	require.Contains(t, js, "SF Bay area")
+}
+
+func TestGeoContainsMultiPointArg(t *testing.T) {
+	// contains query with MultiPoint query arg (GeoJSON form).
+	// Should match stored polygons that contain all the specified points.
+	query := `{
+		me(func: contains(geometry, "{\"type\":\"MultiPoint\",\"coordinates\":[[-122.06,37.37],[-122.07,37.38]]}")) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	// Both points are inside polygon 5105 (Mountain View) and 5104 (SF Bay area)
+	require.Contains(t, js, "Mountain View")
+	require.Contains(t, js, "SF Bay area")
+}
+
+func TestGeoNearMultiPoint(t *testing.T) {
+	// near query should find stored MultiPoint with a point near the query location.
+	// UID 5112 (MultiPoint with first point at -122.082, 37.424) is within 1000m.
+	query := `{
+		me(func: near(geometry, [-122.082, 37.424], 1000)) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	require.Contains(t, js, "Parking Lots")
+	require.Contains(t, js, "Bayshore Freeway")
+	require.Contains(t, js, "Googleplex")
+}
+
+func TestGeoIntersectsMultiLineString(t *testing.T) {
+	// intersects query with a polygon that covers the first segment of UID 5111.
+	query := `{
+		me(func: intersects(geometry, [[[-122.081, 37.423], [-122.081, 37.427], [-122.085, 37.427], [-122.085, 37.423], [-122.081, 37.423]]])) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	require.Contains(t, js, "Peninsula Roads")
+}
+
+func TestGeoExistingGeoUnchanged(t *testing.T) {
+	// Regression: existing geo queries must still work after adding new types.
+	query := `{
+		me(func: near(geometry, [-122.082506, 37.4249518], 1000)) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	require.Contains(t, js, "Googleplex")
+	require.Contains(t, js, "Shoreline Amphitheater")
+	require.Contains(t, js, "SF Bay area")
+	require.Contains(t, js, "Mountain View")
+}
+
+func TestGeoWithinMultiPoint(t *testing.T) {
+	// within query: stored MultiPoint fully inside query polygon.
+	// UID 5114 (MultiPoint at -122.06,37.37 and -122.07,37.38) is inside 5105's polygon.
+	query := `{
+		me(func: within(geometry, [[[-122.06, 37.37], [-122.1, 37.36], [-122.12, 37.4], [-122.11, 37.43], [-122.04, 37.43], [-122.06, 37.37]]])) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	require.Contains(t, js, "Meeting Points")
+}
+
+func TestGeoIntersectsWithMultiLineStringArg(t *testing.T) {
+	// intersects query with MultiLineString query arg (GeoJSON form).
+	query := `{
+		me(func: intersects(geometry, "{\"type\":\"MultiLineString\",\"coordinates\":[[[-122.06,37.37],[-122.07,37.38]],[[-122.082,37.424],[-122.084,37.426]]]}")) {
+			name
+		}
+	}`
+	js := processQueryNoErr(t, query)
+	require.Contains(t, js, "Mountain View")
+	require.Contains(t, js, "SF Bay area")
+}

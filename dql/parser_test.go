@@ -5689,3 +5689,47 @@ func TestEmptyId(t *testing.T) {
 	_, err := Parse(r)
 	require.Error(t, err, "ID cannot be empty")
 }
+
+func TestParseGeoLineStringGeoJSON(t *testing.T) {
+	// GeoJSON object form for LineString should parse as a query argument.
+	query := `{
+		q(func: intersects(geometry, "{\"type\":\"LineString\",\"coordinates\":[[-122.08,37.42],[-122.09,37.43]]}")) {
+			uid
+		}
+	}`
+	_, err := Parse(Request{Str: query})
+	require.NoError(t, err)
+}
+
+func TestParseGeoMultiPointGeoJSON(t *testing.T) {
+	query := `{
+		q(func: contains(geometry, "{\"type\":\"MultiPoint\",\"coordinates\":[[-122.08,37.42],[-122.09,37.43]]}")) {
+			uid
+		}
+	}`
+	_, err := Parse(Request{Str: query})
+	require.NoError(t, err)
+}
+
+func TestParseGeoMultiLineStringGeoJSON(t *testing.T) {
+	query := `{
+		q(func: intersects(geometry, "{\"type\":\"MultiLineString\",\"coordinates\":[[[-122.08,37.42],[-122.09,37.43]],[[-122.10,37.44],[-122.11,37.45]]]}")) {
+			uid
+		}
+	}`
+	_, err := Parse(Request{Str: query})
+	require.NoError(t, err)
+}
+
+func TestParseGeoBracketShorthandUnchanged(t *testing.T) {
+	// Existing bracket shorthands must remain unchanged.
+	// Point shorthand
+	query1 := `{ q(func: near(loc, [1.0, 2.0], 1000)) { uid } }`
+	_, err := Parse(Request{Str: query1})
+	require.NoError(t, err)
+
+	// Polygon shorthand
+	query2 := `{ q(func: within(geometry, [[[1.0,2.0],[3.0,4.0],[5.0,6.0],[1.0,2.0]]])) { uid } }`
+	_, err = Parse(Request{Str: query2})
+	require.NoError(t, err)
+}

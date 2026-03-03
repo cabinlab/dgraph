@@ -204,6 +204,61 @@ func addGeoMultiPolygonToCluster(uid uint64, polygons [][][][]float64) error {
 	return addTriplesToCluster(triple)
 }
 
+func addGeoLineStringToCluster(uid uint64, pred string, coords [][]float64) error {
+	coordinates := "["
+	for i, point := range coords {
+		coordinates += fmt.Sprintf("[%v, %v]", point[0], point[1])
+		if i != len(coords)-1 {
+			coordinates += ","
+		}
+	}
+	coordinates += "]"
+
+	triple := fmt.Sprintf(
+		`<%d> <%s> "{'type':'LineString', 'coordinates': %s}"^^<geo:geojson> .`,
+		uid, pred, coordinates)
+	return addTriplesToCluster(triple)
+}
+
+func addGeoMultiLineStringToCluster(uid uint64, pred string, lines [][][]float64) error {
+	coordinates := "["
+	for i, line := range lines {
+		coordinates += "["
+		for j, point := range line {
+			coordinates += fmt.Sprintf("[%v, %v]", point[0], point[1])
+			if j != len(line)-1 {
+				coordinates += ","
+			}
+		}
+		coordinates += "]"
+		if i != len(lines)-1 {
+			coordinates += ","
+		}
+	}
+	coordinates += "]"
+
+	triple := fmt.Sprintf(
+		`<%d> <%s> "{'type':'MultiLineString', 'coordinates': %s}"^^<geo:geojson> .`,
+		uid, pred, coordinates)
+	return addTriplesToCluster(triple)
+}
+
+func addGeoMultiPointToCluster(uid uint64, pred string, points [][]float64) error {
+	coordinates := "["
+	for i, point := range points {
+		coordinates += fmt.Sprintf("[%v, %v]", point[0], point[1])
+		if i != len(points)-1 {
+			coordinates += ","
+		}
+	}
+	coordinates += "]"
+
+	triple := fmt.Sprintf(
+		`<%d> <%s> "{'type':'MultiPoint', 'coordinates': %s}"^^<geo:geojson> .`,
+		uid, pred, coordinates)
+	return addTriplesToCluster(triple)
+}
+
 var testSchema = `
 type Person {
 	name
@@ -447,6 +502,11 @@ func populateCluster(dc dgraphapi.Cluster) {
 		<5105> <name> "Mountain View" .
 		<5106> <name> "San Carlos" .
 		<5107> <name> "New York" .
+		<5110> <name> "Bayshore Freeway" .
+		<5111> <name> "Peninsula Roads" .
+		<5112> <name> "Parking Lots" .
+		<5113> <name> "Campus Walk" .
+		<5114> <name> "Meeting Points" .
 		<8192> <name> "Regex Master" .
 		<10000> <name> "Alice" .
 		<10001> <name> "Elizabeth" .
@@ -949,6 +1009,32 @@ func populateCluster(dc dgraphapi.Cluster) {
 		{{{-74.102783203125, 40.8595252289932}, {-74.2730712890625, 40.718119379753446},
 			{-74.0478515625, 40.66813955408042}, {-73.98193359375, 40.772221877329024},
 			{-74.102783203125, 40.8595252289932}}},
+	}))
+
+	// LineString - a road-like line near SF test area
+	x.Panic(addGeoLineStringToCluster(5110, "geometry", [][]float64{
+		{-122.082, 37.424}, {-122.084, 37.426}, {-122.086, 37.428},
+	}))
+
+	// MultiLineString - two separate road segments
+	x.Panic(addGeoMultiLineStringToCluster(5111, "geometry", [][][]float64{
+		{{-122.082, 37.424}, {-122.084, 37.426}},
+		{{-122.090, 37.430}, {-122.092, 37.432}},
+	}))
+
+	// MultiPoint - several discrete locations
+	x.Panic(addGeoMultiPointToCluster(5112, "geometry", [][]float64{
+		{-122.082, 37.424}, {-122.084, 37.426}, {-122.090, 37.430},
+	}))
+
+	// LineString inside existing test polygon (5105: Mountain View)
+	x.Panic(addGeoLineStringToCluster(5113, "geometry", [][]float64{
+		{-122.06, 37.37}, {-122.07, 37.38},
+	}))
+
+	// MultiPoint all inside existing test polygon (5105: Mountain View)
+	x.Panic(addGeoMultiPointToCluster(5114, "geometry", [][]float64{
+		{-122.06, 37.37}, {-122.07, 37.38},
 	}))
 
 	// Add data for regex tests.
