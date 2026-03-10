@@ -1,7 +1,7 @@
 # Used only by the (currently disabled) nightly build workflow
 
 ###################### Stage I ######################
-FROM golang:1.25.7 AS builder
+FROM golang:1.25.0 AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bzip2 \
     git \
